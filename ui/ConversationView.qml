@@ -16,7 +16,14 @@ Rectangle {
     function clampY(y) {
         return Math.max(list.originY, Math.min(list.originY + list.contentHeight - list.height, y))
     }
-    function scrollLine(d) { list.contentY = clampY(list.contentY + d * 90) }
+    // j/k scroll; at a scroll edge (or when the thread fits the viewport,
+    // where scrolling has nowhere to go) they flow into message-focus moves
+    function scrollLine(d) {
+        const maxY = list.originY + list.contentHeight - list.height
+        const atEdge = d > 0 ? list.contentY >= maxY - 1 : list.contentY <= list.originY + 1
+        if (atEdge) { move(d); return }
+        list.contentY = clampY(list.contentY + d * 90)
+    }
     function scroll(d) { list.contentY = clampY(list.contentY + d * list.height / 2) }
     function toTop() { list.contentY = list.originY; list.currentIndex = 0 }
     function toEnd() { list.contentY = clampY(list.originY + list.contentHeight); list.currentIndex = list.count - 1 }
@@ -154,13 +161,22 @@ Rectangle {
             height: content.height + 24
             color: "transparent"
 
+            // every message is a card; focus shows as the gutter cursor bar,
+            // not as a lone card that reads like an inconsistency
             Rectangle {
                 anchors.fill: parent
                 anchors.leftMargin: 10; anchors.rightMargin: 10
                 radius: Theme.radius
-                color: index === list.currentIndex ? Theme.surface1 : "transparent"
-                border.color: index === list.currentIndex ? Theme.hairline : "transparent"
+                color: Theme.surface1
+                border.color: Theme.hairline
                 border.width: 1
+            }
+            Rectangle {
+                visible: index === list.currentIndex && Backend.messages.length > 1
+                anchors.left: parent.left; anchors.leftMargin: 10
+                anchors.top: parent.top; anchors.topMargin: 14
+                width: 3; height: 24; radius: 2
+                color: Theme.cursor
             }
 
             Column {
