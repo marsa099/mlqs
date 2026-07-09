@@ -6,6 +6,7 @@ import "."
 // cursor, faint tint on the open folder, loud/quiet unread hierarchy.
 Rectangle {
     id: bar
+    signal composeRequested()
     color: Theme.bg_alt
     property bool active: false
     property int sel: 0
@@ -43,6 +44,22 @@ Rectangle {
         anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right
         height: 52
         Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Theme.hairline }
+        // new-message button (reference: circular quill, header right)
+        Rectangle {
+            anchors.right: parent.right; anchors.rightMargin: 10
+            anchors.verticalCenter: parent.verticalCenter
+            width: 32; height: 32; radius: 16
+            color: Theme.mode === "light" ? Theme.bg : Theme.surface2
+            border.width: 1; border.color: Theme.hairline
+            Item {
+                anchors.centerIn: parent; width: 16; height: 16
+                Image { id: penI; anchors.fill: parent; visible: false
+                        source: "assets/drafts.svg"; sourceSize.width: 32; sourceSize.height: 32 }
+                MultiEffect { anchors.fill: penI; source: penI; colorization: 1; colorizationColor: Theme.fg }
+            }
+            HoverHandler { cursorShape: Qt.PointingHandCursor }
+            TapHandler { onTapped: bar.composeRequested() }
+        }
         Row {
             anchors.left: parent.left; anchors.leftMargin: 10
             anchors.verticalCenter: parent.verticalCenter

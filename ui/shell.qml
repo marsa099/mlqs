@@ -37,7 +37,7 @@ FloatingWindow {
     component CapGap: Item { width: 8; height: 1 }
 
     readonly property bool insertMode: (Backend.openConvId !== "" && conv.replyHasFocus)
-                                       || composer.visible || searchBox.visible
+                                       || composer.visible || index.searchFocus
     property string pane: "index"   // "sidebar" | "index"
     property bool gPending: false
     property bool dPending: false
@@ -58,6 +58,7 @@ FloatingWindow {
             id: sidebar
             width: 250; height: parent.height
             active: win.pane === "sidebar"
+            onComposeRequested: composer.composeNew()
         }
         Rectangle { width: 1; height: parent.height; color: Theme.hairline }
 
@@ -69,41 +70,13 @@ FloatingWindow {
                 anchors.fill: parent
                 visible: Backend.openConvId === ""
                 active: win.pane === "index"
+                onSearchDone: keys.forceActiveFocus()
             }
             ConversationView {
                 id: conv
                 anchors.fill: parent
                 visible: Backend.openConvId !== ""
                 onExitInsert: keys.forceActiveFocus()
-            }
-        }
-    }
-
-    // search input ('/')
-    Rectangle {
-        id: searchBox
-        visible: false
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.top: parent.top; anchors.topMargin: 60
-        width: 520; height: 44
-        radius: Theme.radius; color: Theme.overlay
-        border.color: Theme.hairline; border.width: 1
-        function open() { visible = true; searchInput.text = ""; searchInput.forceActiveFocus() }
-        function close() { visible = false; keys.forceActiveFocus() }
-        TextField {
-            id: searchInput
-            anchors.fill: parent; anchors.margins: 6
-            color: Theme.fg
-            placeholderText: "search mail…  (Gmail syntax: from:, is:unread, has:attachment)"
-            placeholderTextColor: Theme.fg_muted
-            font.family: Theme.fontFamily; font.pixelSize: 13
-            background: null
-            Keys.onPressed: e => {
-                if (e.key === Qt.Key_Escape) { searchBox.close(); e.accepted = true }
-                else if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) {
-                    if (text.trim() !== "") Backend.runSearch(text.trim())
-                    searchBox.close(); e.accepted = true
-                }
             }
         }
     }
@@ -379,7 +352,7 @@ FloatingWindow {
                 else Backend.refresh()
                 break
             case Qt.Key_Slash:
-                searchBox.open()
+                if (!inConv) index.focusSearch()
                 break
             default:
                 return

@@ -1,8 +1,12 @@
 import QtQuick
+import QtQuick.Controls
 import "."
 
 Rectangle {
     id: idx
+    signal searchDone()
+    function focusSearch() { sInput.forceActiveFocus() }
+    readonly property bool searchFocus: sInput.activeFocus
     color: Theme.bg
     property bool active: true
 
@@ -40,6 +44,29 @@ Rectangle {
             color: Theme.fg; font.family: Theme.fontFamily
             font.hintingPreference: Font.PreferNoHinting
             font.pixelSize: 14; font.weight: 600
+        }
+        Rectangle {
+            anchors.right: parent.right; anchors.rightMargin: 12
+            anchors.verticalCenter: parent.verticalCenter
+            width: 230; height: 30; radius: 8
+            color: Theme.surface
+            border.width: 1
+            border.color: sInput.activeFocus ? Theme.fg_muted : Theme.hairline
+            TextField {
+                id: sInput
+                anchors.fill: parent; anchors.leftMargin: 8
+                color: Theme.fg; background: null
+                placeholderText: "search…  (/)"
+                placeholderTextColor: Theme.fg_muted
+                font.family: Theme.fontFamily; font.pixelSize: 12
+                Keys.onPressed: e => {
+                    if (e.key === Qt.Key_Escape) { text = ""; idx.searchDone(); e.accepted = true }
+                    else if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) {
+                        if (text.trim() !== "") Backend.runSearch(text.trim())
+                        idx.searchDone(); e.accepted = true
+                    }
+                }
+            }
         }
         Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: Theme.hairline }
     }
