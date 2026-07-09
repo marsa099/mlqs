@@ -4,7 +4,11 @@
 package notify
 
 import (
+	"encoding/json"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"strconv"
 	"sync"
 
 	enotify "github.com/esiqveland/notify"
@@ -21,8 +25,42 @@ type Notifier struct {
 
 // New connects a private session bus (so AppName stays "mlqs" downstream).
 // On any failure the notifier degrades to notify-send without actions.
+// keys persist to disk so a daemon restart doesn't orphan the deep-links of
+// notifications already sitting in the notification center
+func keysPath() string {
+	return filepath.Join(os.Getenv("HOME"), ".cache", "mlqs", "notif-keys.json")
+}
+
+func (n *Notifier) load() {
+	b, err := os.ReadFile(keysPath())
+	if err != nil {
+		return
+	}
+	var m map[string]string
+	if json.Unmarshal(b, &m) != nil {
+		return
+	}
+	for k, v := range m {
+		if id, err := strconv.ParseUint(k, 10, 32); err == nil {
+			n.keys[uint32(id)] = v
+		}
+	}
+}
+
+// save is called with n.mu held.
+func (n *Notifier) save() {
+	m := map[string]string{}
+	for id, v := range n.keys {
+		m[strconv.FormatUint(uint64(id), 10)] = v
+	}
+	b, _ := json.Marshal(m)
+	os.MkdirAll(filepath.Dir(keysPath()), 0o700)
+	os.WriteFile(keysPath(), b, 0o600)
+}
+
 func New(onActivate func(key string)) *Notifier {
 	n := &Notifier{keys: map[uint32]string{}, onAct: onActivate}
+	n.load()
 	conn, err := dbus.SessionBusPrivate()
 	if err != nil {
 		return n
@@ -52,6 +90,7 @@ func (n *Notifier) handleAction(sig *enotify.ActionInvokedSignal) {
 	n.mu.Lock()
 	key := n.keys[sig.ID]
 	delete(n.keys, sig.ID)
+	n.save()
 	n.mu.Unlock()
 	if key != "" && n.onAct != nil {
 		n.onAct(key)
@@ -61,6 +100,7 @@ func (n *Notifier) handleAction(sig *enotify.ActionInvokedSignal) {
 func (n *Notifier) handleClosed(sig *enotify.NotificationClosedSignal) {
 	n.mu.Lock()
 	delete(n.keys, sig.ID)
+	n.save()
 	n.mu.Unlock()
 }
 
@@ -91,5 +131,6 @@ func (n *Notifier) Notify(key, title, body string) {
 	}
 	n.mu.Lock()
 	n.keys[id] = key
+	n.save()
 	n.mu.Unlock()
 }
