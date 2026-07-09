@@ -50,8 +50,10 @@ Rectangle {
     // rect, and real KeyCap components draw there. Vector-crisp on every
     // display scale (raster grabs can't serve a 1.75x laptop + 1.0x monitor).
     property var hintRects: []
+    // thin-space padding inside the cap; the trailing nbsp stays OUTSIDE it
+    // as the right-hand gap (matching the word space on the left)
     function _reserved(label) {
-        return '\u200B<span style="color:transparent;">&nbsp;' + label + '&nbsp;</span>'
+        return '\u200B<span style="color:transparent;">&#8201;' + label + '&#8201;&nbsp;</span>'
     }
     function _renderHints() {
         let k = 0
@@ -255,7 +257,7 @@ Rectangle {
                             const lab = cv.hintLabels[k]
                             const r1 = geom.positionToRectangle(p + 1)
                             const r2 = geom.positionToRectangle(p + 1 + lab.length + 2)
-                            rects.push({ x: r1.x, y: r1.y, w: Math.max(r2.x - r1.x, 18), h: r1.height, label: lab })
+                            rects.push({ x: r1.x, y: r1.y, w: Math.max(r2.x - r1.x, 16), h: r1.height, label: lab })
                         }
                         cv.hintRects = rects
                     }
@@ -272,9 +274,9 @@ Rectangle {
                         delegate: Rectangle {
                             required property var modelData
                             readonly property bool dim: cv.hintBuf !== "" && modelData.label.indexOf(cv.hintBuf) !== 0
-                            x: modelData.x + 1
+                            x: modelData.x
                             y: modelData.y + (modelData.h - height) / 2
-                            width: modelData.w - 2
+                            width: modelData.w
                             height: 18
                             radius: 5
                             border.width: dim ? 0 : 1

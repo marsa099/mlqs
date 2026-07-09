@@ -118,11 +118,12 @@ FloatingWindow {
             const ctrl = e.modifiers & Qt.ControlModifier
             const inConv = Backend.openConvId !== ""
 
-            // hint mode captures the keyboard until a label matches or Esc
+            // hint mode owns Esc + label letters; any OTHER key drops the
+            // hints and handles normally (Shift+J/K message nav, scrolling…)
             if (inConv && conv.hinting) {
-                if (e.key === Qt.Key_Escape) conv.cancelHints()
-                else if (e.text && /^[a-z]$/.test(e.text)) conv.hintKey(e.text)
-                e.accepted = true; return
+                if (e.key === Qt.Key_Escape) { conv.cancelHints(); e.accepted = true; return }
+                if (e.text && /^[a-z]$/.test(e.text)) { conv.hintKey(e.text); e.accepted = true; return }
+                conv.cancelHints()
             }
 
             // account switch: Ctrl+Shift+L/H next/prev (before the pane-focus
