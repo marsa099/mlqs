@@ -17,7 +17,9 @@ import (
 	"log"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -27,6 +29,7 @@ import (
 	"mlqs/internal/debuglog"
 	"mlqs/internal/gmail"
 	"mlqs/internal/provider"
+	"mlqs/internal/sanitize"
 )
 
 func sockPath() string {
@@ -113,7 +116,7 @@ func (d *daemon) serve(conn net.Conn) {
 		switch cmd.Type {
 		case "ping":
 			d.sendTo(conn, map[string]any{"type": "pong"})
-		case "folders", "conversations", "conversation", "search", "markread", "star", "archive", "trash":
+		case "folders", "conversations", "conversation", "openhtml", "search", "markread", "star", "archive", "trash":
 			go d.handle(conn, cmd)
 		default:
 			d.sendTo(conn, map[string]any{"type": "toast",
@@ -160,8 +163,41 @@ func (d *daemon) handle(conn net.Conn, cmd command) {
 			fail(err)
 			return
 		}
+		out := make([]map[string]any, 0, len(msgs))
+		for _, m := range msgs {
+			out = append(out, map[string]any{
+				"id": m.ID, "convId": m.ConvID, "from": m.From, "to": m.To, "cc": m.Cc,
+				"subject": m.Subject, "snippet": m.Snippet, "date": m.Date,
+				"unread": m.Unread, "starred": m.Starred, "attachments": m.Attachments,
+				"bodyRich": sanitize.Rich(m.BodyHTML, m.BodyText),
+				"hasHtml":  strings.TrimSpace(m.BodyHTML) != "",
+			})
+		}
 		d.sendTo(conn, map[string]any{"type": "conversation", "account": cmd.Account,
-			"id": cmd.ID, "messages": msgs})
+			"id": cmd.ID, "messages": out})
+	case "openhtml":
+		// `o` on a message: write the ORIGINAL html to cache and open in the
+		// browser — the escape hatch for mail the sanitizer mangles.
+		msgs, err := p.GetConversation(ctx, cmd.ID)
+		if err != nil {
+			fail(err)
+			return
+		}
+		for _, m := range msgs {
+			if m.ID != cmd.Text || m.BodyHTML == "" {
+				continue
+			}
+			dir := filepath.Join(os.Getenv("HOME"), ".cache", "mlqs", "view")
+			os.MkdirAll(dir, 0o700)
+			path := filepath.Join(dir, m.ID+".html")
+			if err := os.WriteFile(path, []byte(m.BodyHTML), 0o600); err != nil {
+				fail(err)
+				return
+			}
+			exec.Command("xdg-open", path).Start()
+			return
+		}
+		d.sendTo(conn, map[string]any{"type": "toast", "text": "no html body to open"})
 	case "search":
 		pg, err := p.Search(ctx, cmd.Query, 50)
 		if err != nil {
