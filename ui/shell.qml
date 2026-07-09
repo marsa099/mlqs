@@ -163,7 +163,9 @@ FloatingWindow {
                 break
             case Qt.Key_Escape:
             case Qt.Key_H:
+                // spatial: conversation → index → sidebar
                 if (inConv) Backend.closeConv()
+                else if (win.pane === "index") win.pane = "sidebar"
                 break
             case Qt.Key_L:
                 if (!inConv && win.pane === "index") index.open()
