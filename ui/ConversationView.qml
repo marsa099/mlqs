@@ -7,6 +7,7 @@ Rectangle {
 
     function move(d) {
         if (list.count === 0) return
+        cancelHints()
         list.currentIndex = Math.max(0, Math.min(list.count - 1, list.currentIndex + d))
         list.positionViewAtIndex(list.currentIndex, ListView.Beginning)
     }
@@ -28,6 +29,56 @@ Rectangle {
         if (m && m.hasHtml) Backend.openHtml(m.id)
         else Backend.toast("no html body")
     }
+
+    // vimium-style link hints: `f` injects [a]/[s]… labels before every link
+    // and image in the FOCUSED message's rich text; typing a label opens it.
+    property bool hinting: false
+    property string hintBuf: ""
+    property var hintTargets: []
+    property var hintLabels: []
+    property string hintedHtml: ""
+    property int hintIndex: -1
+
+    readonly property var _hintRe: /<a\s[^>]*href="([^"]+)"[^>]*>|<img\s[^>]*src="(file:[^"]+)"[^>]*\/?>/gi
+
+    function startHints() {
+        const m = Backend.messages[list.currentIndex]
+        if (!m) return
+        const html = m.bodyRich || ""
+        const targets = []
+        let match
+        _hintRe.lastIndex = 0
+        while ((match = _hintRe.exec(html)) !== null) targets.push(match[1] || match[2])
+        if (targets.length === 0) { Backend.toast("no links in message"); return }
+        const A = "asdfghjkl"
+        let labels
+        if (targets.length <= A.length) labels = A.slice(0, targets.length).split("")
+        else {
+            labels = []
+            for (let i = 0; i < A.length && labels.length < targets.length; i++)
+                for (let j = 0; j < A.length && labels.length < targets.length; j++)
+                    labels.push(A[i] + A[j])
+        }
+        let k = 0
+        _hintRe.lastIndex = 0
+        hintedHtml = html.replace(_hintRe, tag =>
+            '<font color="' + Theme.cursor + '"><b>[' + labels[k++] + ']</b></font>' + tag)
+        hintTargets = targets; hintLabels = labels
+        hintIndex = list.currentIndex; hintBuf = ""; hinting = true
+    }
+    function cancelHints() { hinting = false; hintBuf = ""; hintIndex = -1 }
+    function hintKey(ch) {
+        const buf = hintBuf + ch
+        const exact = hintLabels.indexOf(buf)
+        if (exact >= 0) {
+            const url = hintTargets[exact]
+            cancelHints()
+            Qt.openUrlExternally(url)
+            return
+        }
+        if (hintLabels.some(l => l.indexOf(buf) === 0)) hintBuf = buf
+        else cancelHints()
+    }
     Connections {
         target: Backend
         function onMessagesChanged() {
@@ -46,7 +97,7 @@ Rectangle {
             anchors.left: parent.left; anchors.leftMargin: 14
             anchors.right: parent.right; anchors.rightMargin: 14
             anchors.verticalCenter: parent.verticalCenter
-            text: Backend.openConvSubject
+            text: Backend.openConvSubject + (cv.hinting ? "   󰌒 " + (cv.hintBuf || "type label…") : "")
             color: Theme.fg; font.family: Theme.fontFamily
             font.hintingPreference: Font.PreferNoHinting
             font.pixelSize: 14; font.weight: 600
@@ -153,7 +204,7 @@ Rectangle {
                     width: parent.width
                     textFormat: Text.RichText
                     wrapMode: Text.Wrap
-                    text: modelData.bodyRich || ""
+                    text: (cv.hinting && index === cv.hintIndex) ? cv.hintedHtml : (modelData.bodyRich || "")
                     linkColor: Theme.sky
                     color: Theme.fg_secondary
                     font.family: Theme.fontFamily

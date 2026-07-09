@@ -118,6 +118,13 @@ FloatingWindow {
             const ctrl = e.modifiers & Qt.ControlModifier
             const inConv = Backend.openConvId !== ""
 
+            // hint mode captures the keyboard until a label matches or Esc
+            if (inConv && conv.hinting) {
+                if (e.key === Qt.Key_Escape) conv.cancelHints()
+                else if (e.text && /^[a-z]$/.test(e.text)) conv.hintKey(e.text)
+                e.accepted = true; return
+            }
+
             // account switch: Ctrl+Shift+L/H next/prev (before the pane-focus
             // matches below, which would otherwise swallow Ctrl+H/L with shift)
             if (ctrl && (e.modifiers & Qt.ShiftModifier) && (e.key === Qt.Key_L || e.key === Qt.Key_H)) {
@@ -203,6 +210,9 @@ FloatingWindow {
                 break
             case Qt.Key_O:
                 if (inConv) conv.openCurrentHtml()
+                break
+            case Qt.Key_F:
+                if (inConv) conv.startHints()
                 break
             case Qt.Key_C:
                 composer.composeNew()
