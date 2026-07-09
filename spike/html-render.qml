@@ -27,6 +27,12 @@ ShellRoot {
         }
         Component.onCompleted: load()
 
+        // Remote URLs must NEVER reach Text — Qt fetches them from the render
+        // thread and segfaults quickshell. Applied even to the "raw" view.
+        function blockRemote(html) {
+            return html.replace(/src="https?:\/\/[^"]*"/gi, 'src=""')
+        }
+
         function sanitize(html) {
             let s = html
             s = s.replace(/<!--[\s\S]*?-->/g, "")
@@ -43,7 +49,7 @@ ShellRoot {
             s = s.replace(/\s(style|class|width|height|align|bgcolor|border|cellpadding|cellspacing|dir)="[^"]*"/gi, "")
             // remote images blocked by default (tracking pixels)
             s = s.replace(/<img[^>]*src="https?:[^"]*"[^>]*>/gi, "<i>[image blocked]</i>")
-            return s
+            return blockRemote(s)
         }
 
         Rectangle {
@@ -68,7 +74,7 @@ ShellRoot {
                 wrapMode: Text.Wrap
                 color: "#1a1a1a"
                 font.pixelSize: 15
-                text: win.sanitized ? win.sanitize(win.rawHtml) : win.rawHtml
+                text: win.sanitized ? win.sanitize(win.rawHtml) : win.blockRemote(win.rawHtml)
                 onLinkActivated: link => console.log("link:", link)
             }
         }
