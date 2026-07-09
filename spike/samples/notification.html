@@ -1,0 +1,22 @@
+<html>
+<body>
+<p><b>@viktor</b> requested your review on <a href="https://github.com/lovable/lovable/pull/4821">lovable/lovable#4821</a></p>
+<h3>fix(design-systems): skip and clear invalid tokens on import</h3>
+<p>Imports with malformed color tokens currently abort the whole batch. This
+skips the invalid entries, clears stale cache rows, and surfaces a per-token
+warning instead.</p>
+<pre style="background:#f6f8fa;padding:12px;font-family:monospace;font-size:13px">
+- if (!parse(token)) throw new ImportError(token)
++ if (!parse(token)) { warnings.push(token); continue }
+</pre>
+<blockquote style="border-left:3px solid #ddd;padding-left:12px;color:#666">
+  Follow-up from last week's incident — see the postmortem doc for context.
+</blockquote>
+<p>
+  <a href="https://github.com/lovable/lovable/pull/4821/files">View changes</a> ·
+  <a href="https://github.com/settings/notifications">Notification settings</a>
+</p>
+<hr>
+<p style="font-size:12px;color:#888">You are receiving this because your review was requested.</p>
+</body>
+</html>
