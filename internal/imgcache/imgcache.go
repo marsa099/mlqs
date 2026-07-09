@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"sync"
 	"time"
 
@@ -37,7 +38,33 @@ const (
 
 var client = &http.Client{Timeout: 8 * time.Second}
 
-var reRemoteImg = regexp.MustCompile(`(?i)<img[^>]*\bsrc="(https?://[^"]+)"[^>]*/?>`)
+var (
+	reRemoteImg  = regexp.MustCompile(`(?i)<img[^>]*\bsrc="(https?://[^"]+)"[^>]*/?>`)
+	reWidthAttr  = regexp.MustCompile(`(?i)\bwidth="(\d+)"`)
+	reHeightAttr = regexp.MustCompile(`(?i)\bheight="(\d+)"`)
+)
+
+// SizeAttrs carries the sender's intended display size onto a rewritten img
+// tag (emails size 32px icons via width= on huge source images). Width wins;
+// height alone only when no width — both would distort after our downscale.
+func SizeAttrs(tag string) string {
+	if m := reWidthAttr.FindStringSubmatch(tag); m != nil {
+		w, _ := strconv.Atoi(m[1])
+		if w > 0 {
+			if w > 800 {
+				w = 800
+			}
+			return fmt.Sprintf(` width="%d"`, w)
+		}
+	}
+	if m := reHeightAttr.FindStringSubmatch(tag); m != nil {
+		h, _ := strconv.Atoi(m[1])
+		if h > 0 && h <= 800 {
+			return fmt.Sprintf(` height="%d"`, h)
+		}
+	}
+	return ""
+}
 
 func Dir() string {
 	return filepath.Join(os.Getenv("HOME"), ".cache", "mlqs", "images")
@@ -156,7 +183,7 @@ func RewriteRemote(ctx context.Context, html string) string {
 	return reRemoteImg.ReplaceAllStringFunc(html, func(tag string) string {
 		m := reRemoteImg.FindStringSubmatch(tag)
 		if p := paths[m[1]]; p != "" {
-			return `<img src="file://` + p + `">`
+			return `<img src="file://` + p + `"` + SizeAttrs(tag) + `>`
 		}
 		return tag
 	})

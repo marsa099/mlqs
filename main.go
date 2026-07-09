@@ -265,7 +265,7 @@ func rewriteCids(ctx context.Context, p provider.Provider, m provider.Message, h
 				return tag
 			}
 		}
-		return `<img src="file://` + path + `">`
+		return `<img src="file://` + path + `"` + imgcache.SizeAttrs(tag) + `>`
 	})
 }
 

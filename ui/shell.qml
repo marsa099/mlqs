@@ -123,12 +123,13 @@ FloatingWindow {
 
             switch (e.key) {
             case Qt.Key_J:
-                if (inConv) conv.move(1)
+                // in a conversation j/k scroll; Shift+J/K jump between messages
+                if (inConv) (e.modifiers & Qt.ShiftModifier) ? conv.move(1) : conv.scrollLine(1)
                 else if (win.pane === "sidebar") sidebar.move(1)
                 else index.move(1)
                 break
             case Qt.Key_K:
-                if (inConv) conv.move(-1)
+                if (inConv) (e.modifiers & Qt.ShiftModifier) ? conv.move(-1) : conv.scrollLine(-1)
                 else if (win.pane === "sidebar") sidebar.move(-1)
                 else index.move(-1)
                 break

@@ -51,16 +51,16 @@ func HTML(s string) string {
 	s = reThClose.ReplaceAllString(s, "</b></div>")
 	s = reTdOpen.ReplaceAllString(s, "<div>")
 	s = reTdClose.ReplaceAllString(s, "</div>")
-	s = reAttrs.ReplaceAllString(s, "")
-	s = reCenter.ReplaceAllString(s, "")
-	s = reFont.ReplaceAllString(s, "")
-
-	// stash daemon-cached file:// images, drop every other img (alt text stays)
+	// stash daemon-cached file:// images FIRST — their width/height attrs are
+	// the sender's icon sizing and must survive the attribute strip below
 	var stash []string
 	s = reFileImg.ReplaceAllStringFunc(s, func(m string) string {
 		stash = append(stash, m)
 		return "\x00img\x00"
 	})
+	s = reAttrs.ReplaceAllString(s, "")
+	s = reCenter.ReplaceAllString(s, "")
+	s = reFont.ReplaceAllString(s, "")
 	s = reImgAlt.ReplaceAllString(s, "<i>$1</i>")
 	s = reAnyImg.ReplaceAllString(s, "")
 	s = reRemoteSrc.ReplaceAllString(s, `src=""`)

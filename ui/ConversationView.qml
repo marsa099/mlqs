@@ -8,20 +8,30 @@ Rectangle {
     function move(d) {
         if (list.count === 0) return
         list.currentIndex = Math.max(0, Math.min(list.count - 1, list.currentIndex + d))
+        list.positionViewAtIndex(list.currentIndex, ListView.Beginning)
     }
-    function scroll(d) { list.contentY = Math.max(0, Math.min(list.contentHeight - list.height, list.contentY + d * list.height / 2)) }
-    function toTop() { list.positionViewAtBeginning(); list.currentIndex = 0 }
-    function toEnd() { list.positionViewAtEnd(); list.currentIndex = list.count - 1 }
+    function clampY(y) {
+        return Math.max(list.originY, Math.min(list.originY + list.contentHeight - list.height, y))
+    }
+    function scrollLine(d) { list.contentY = clampY(list.contentY + d * 90) }
+    function scroll(d) { list.contentY = clampY(list.contentY + d * list.height / 2) }
+    function toTop() { list.contentY = list.originY; list.currentIndex = 0 }
+    function toEnd() { list.contentY = clampY(list.originY + list.contentHeight); list.currentIndex = list.count - 1 }
+    // newest message focused, scrolled to its TOP (not its end — a long
+    // newsletter must open at the start, not the footer)
+    function focusNewest() {
+        list.currentIndex = list.count - 1
+        list.positionViewAtIndex(list.currentIndex, ListView.Beginning)
+    }
     function openCurrentHtml() {
         const m = Backend.messages[list.currentIndex]
         if (m && m.hasHtml) Backend.openHtml(m.id)
         else Backend.toast("no html body")
     }
-    // newest message focused + in view on open
     Connections {
         target: Backend
         function onMessagesChanged() {
-            if (Backend.messages.length > 0) Qt.callLater(cv.toEnd)
+            if (Backend.messages.length > 0) Qt.callLater(cv.focusNewest)
         }
     }
 
