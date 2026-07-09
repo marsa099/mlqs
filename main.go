@@ -164,13 +164,64 @@ func (d *daemon) handle(conn net.Conn, cmd command) {
 		}
 		d.sendTo(conn, map[string]any{"type": "folders", "account": cmd.Account, "folders": fs})
 	case "conversations":
-		pg, err := p.ListConversations(ctx, cmd.Folder, cmd.Cursor, 50, cmd.Unread)
-		if err != nil {
-			fail(err)
+		if cmd.Cursor != "" {
+			pg, err := p.ListConversations(ctx, cmd.Folder, cmd.Cursor, 50, false)
+			if err != nil {
+				fail(err)
+				return
+			}
+			d.sendTo(conn, map[string]any{"type": "conversations", "account": cmd.Account,
+				"folder": cmd.Folder, "items": pg.Conversations, "next": pg.NextCursor})
 			return
 		}
+		// First page: unreads pin to the top — fetch the folder's full unread
+		// set (capped) and the newest page of everything, stitched. Deep-buried
+		// unreads surface instead of hiding hundreds of rows down.
+		var wg sync.WaitGroup
+		var unread []provider.Conversation
+		var normal provider.Page
+		var uerr, nerr error
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			cur := ""
+			for len(unread) < 200 {
+				pg, err := p.ListConversations(ctx, cmd.Folder, cur, 100, true)
+				if err != nil {
+					uerr = err
+					return
+				}
+				unread = append(unread, pg.Conversations...)
+				if pg.NextCursor == "" {
+					break
+				}
+				cur = pg.NextCursor
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			normal, nerr = p.ListConversations(ctx, cmd.Folder, "", 50, false)
+		}()
+		wg.Wait()
+		if nerr != nil {
+			fail(nerr)
+			return
+		}
+		if uerr != nil {
+			debuglog.API("unread stitch %s: %v", cmd.Folder, uerr)
+		}
+		seen := map[string]bool{}
+		for _, c := range unread {
+			seen[c.ID] = true
+		}
+		items := unread
+		for _, c := range normal.Conversations {
+			if !seen[c.ID] {
+				items = append(items, c)
+			}
+		}
 		d.sendTo(conn, map[string]any{"type": "conversations", "account": cmd.Account,
-			"folder": cmd.Folder, "items": pg.Conversations, "next": pg.NextCursor, "unread": cmd.Unread})
+			"folder": cmd.Folder, "items": items, "next": normal.NextCursor})
 	case "conversation":
 		msgs, err := p.GetConversation(ctx, cmd.ID)
 		if err != nil {

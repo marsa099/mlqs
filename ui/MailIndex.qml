@@ -36,7 +36,6 @@ Rectangle {
             anchors.left: parent.left; anchors.leftMargin: 14
             anchors.verticalCenter: parent.verticalCenter
             text: (Backend.currentFolderName.charAt(0) + Backend.currentFolderName.slice(1).toLowerCase())
-                  + (Backend.unreadOnly ? "  · unread" : "")
                   + (Backend.loadingConvs ? "  · loading…" : "")
             color: Theme.fg; font.family: Theme.fontFamily
             font.hintingPreference: Font.PreferNoHinting

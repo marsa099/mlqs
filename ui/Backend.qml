@@ -61,27 +61,19 @@ Singleton {
         send({ type: "folders", account: id })
     }
 
-    // u: server-side unread-only filter, so it pages over ALL unreads
-    property bool unreadOnly: false
-
     function selectFolder(id, name) {
         currentFolderId = id; currentFolderName = name || id
         convsModel.clear(); nextCursor = ""; pendingCursor = ""
         openConvId = ""; messages = []
         loadingConvs = true
-        send({ type: "conversations", account: currentAccount, folder: id, unread: unreadOnly })
-    }
-
-    function toggleUnreadFilter() {
-        unreadOnly = !unreadOnly
-        if (currentFolderId !== "") selectFolder(currentFolderId, currentFolderName)
+        send({ type: "conversations", account: currentAccount, folder: id })
     }
 
     function loadMore() {
         if (nextCursor === "" || loadingConvs) return
         pendingCursor = nextCursor
         loadingConvs = true
-        send({ type: "conversations", account: currentAccount, folder: currentFolderId, cursor: nextCursor, unread: unreadOnly })
+        send({ type: "conversations", account: currentAccount, folder: currentFolderId, cursor: nextCursor })
     }
 
     function openConv(row) {
@@ -210,12 +202,11 @@ Singleton {
         } else if (e.type === "conversations") {
             loadingConvs = false
             if (e.account !== currentAccount) return
-            // a response from the other filter mode (fast u-toggling) is stale
-            if (!!e.unread !== unreadOnly && e.folder === currentFolderId) return
             const items = e.items || []
             if (pendingCursor !== "") pendingCursor = ""
             else convsModel.clear()
-            for (const c of items) convsModel.append(toRow(c))
+            // later pages can overlap the stitched unread block — dedup
+            for (const c of items) if (findRow(c.id) < 0) convsModel.append(toRow(c))
             nextCursor = e.next || ""
         } else if (e.type === "conversation") {
             if (e.id === openConvId) messages = e.messages || []
@@ -223,16 +214,18 @@ Singleton {
             if (e.account !== currentAccount || !e.conv) return
             const c = e.conv
             const inFolder = currentFolderId !== "" && (c.folderIds || []).indexOf(currentFolderId) >= 0
-                && (!unreadOnly || c.unread)
             const row = toRow(c)
             const i = findRow(c.id)
             if (!inFolder) {
                 if (i >= 0) convsModel.remove(i)
                 return
             }
-            // date-sorted target position; new mail lands at the top
-            let pos = 0
-            while (pos < convsModel.count && convsModel.get(pos).dateMs > row.dateMs
+            // unreads live above the read block; date-sorted within each
+            let b = 0
+            while (b < convsModel.count && convsModel.get(b).unread) b++
+            let pos = row.unread ? 0 : b
+            const hi = row.unread ? b : convsModel.count
+            while (pos < hi && convsModel.get(pos).dateMs > row.dateMs
                    && convsModel.get(pos).tid !== c.id) pos++
             if (i < 0) convsModel.insert(pos, row)
             else if (i === pos) convsModel.set(i, row)
