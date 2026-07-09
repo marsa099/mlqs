@@ -321,7 +321,7 @@ func (d *daemon) handle(conn net.Conn, cmd command) {
 		// open an attachment: cid images are already in imgcache; anything
 		// else downloads to the files cache. cmd.ID=message, Text=attachment
 		if p := imgcache.Lookup(imgcache.Key("cid:" + cmd.ID + ":" + cmd.Query)); p != "" && cmd.Query != "" {
-			exec.Command("xdg-open", p).Start()
+			openMedia(p)
 			return
 		}
 		data, err := p.FetchAttachment(ctx, cmd.ID, cmd.Text)
@@ -340,7 +340,7 @@ func (d *daemon) handle(conn net.Conn, cmd command) {
 			fail(err)
 			return
 		}
-		exec.Command("xdg-open", path).Start()
+		openMedia(path)
 	case "search":
 		pg, err := p.Search(ctx, cmd.Query, 50)
 		if err != nil {
@@ -388,6 +388,21 @@ func (d *daemon) handle(conn net.Conn, cmd command) {
 			return
 		}
 		d.sendTo(conn, map[string]any{"type": "sent", "account": cmd.Account, "conv": cmd.Conv})
+	}
+}
+
+// openMedia routes images to the family viewer (imv via media-viewer.sh,
+// same as the chat clients); everything else goes to xdg-open.
+func openMedia(path string) {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp":
+		viewer := os.Getenv("SLK_MEDIA_VIEWER")
+		if viewer == "" {
+			viewer = filepath.Join(os.Getenv("HOME"), ".config", "endcord", "media-viewer.sh")
+		}
+		exec.Command(viewer, path, "img").Start()
+	default:
+		exec.Command("xdg-open", path).Start()
 	}
 }
 

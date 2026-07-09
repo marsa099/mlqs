@@ -191,6 +191,17 @@ Rectangle {
         hinting = true
     }
     function cancelHints() { hinting = false; hintBuf = ""; hintIndex = -1 }
+    // inline images go to the family viewer (imv via media-viewer.sh),
+    // links to the browser — same split as the chat clients
+    function openTarget(url) {
+        if (url.indexOf("file://") === 0) {
+            const viewer = Quickshell.env("SLK_MEDIA_VIEWER")
+                        || (Quickshell.env("HOME") + "/.config/endcord/media-viewer.sh")
+            Quickshell.execDetached([viewer, url.slice(7), "img"])
+            return
+        }
+        Qt.openUrlExternally(url)
+    }
     function hintKey(ch) {
         const buf = hintBuf + ch
         const exact = hintLabels.indexOf(buf)
@@ -203,7 +214,7 @@ Rectangle {
             }
             const url = hintTargets[exact - hintAttCount]
             cancelHints()
-            Qt.openUrlExternally(url)
+            openTarget(url)
             return
         }
         if (hintLabels.some(l => l.indexOf(buf) === 0)) hintBuf = buf
