@@ -89,7 +89,7 @@ Rectangle {
     Item {
         id: threadsRow
         anchors { top: acctHeader.bottom; topMargin: 6; left: parent.left; right: parent.right }
-        height: 36
+        height: 38
         readonly property bool isOpen: Backend.currentFolderId === "__threads"
         readonly property bool primary: bar.active && bar.sel === -1
         Rectangle {
@@ -110,9 +110,9 @@ Rectangle {
         Row {
             anchors.fill: parent
             anchors.leftMargin: bar.active ? 36 : 18
-            spacing: 7
+            spacing: 11
             Item {
-                width: 16; height: 16
+                width: 18; height: 18
                 anchors.verticalCenter: parent.verticalCenter
                 Image {
                     id: thImg
@@ -147,6 +147,7 @@ Rectangle {
         anchors { top: threadsRow.bottom; topMargin: 2; left: parent.left; right: parent.right; bottom: parent.bottom }
         model: bar.visibleFolders
         clip: true
+        spacing: 2
         boundsBehavior: Flickable.StopAtBounds
 
         section.property: "section"
@@ -194,7 +195,7 @@ Rectangle {
             id: row
             required property var modelData
             required property int index
-            width: list.width; height: 36
+            width: list.width; height: 38
             readonly property bool cursor: index === bar.sel
             readonly property bool isOpen: modelData.id === Backend.currentFolderId
             readonly property bool primary: bar.active && cursor
@@ -236,10 +237,10 @@ Rectangle {
                 anchors.fill: parent
                 anchors.leftMargin: bar.active ? 36 : 18
                 anchors.rightMargin: 8 + (modelData.unread > 0 ? 38 : 0)
-                spacing: 7
+                spacing: 11
                 Item {
                     id: glyph
-                    width: 16; height: 16
+                    width: 18; height: 18
                     anchors.verticalCenter: parent.verticalCenter
                     Image {
                         id: gImg
