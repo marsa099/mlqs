@@ -165,7 +165,7 @@ Rectangle {
     function startHints() {
         const m = Backend.messages[list.currentIndex]
         if (!m) return
-        const atts = m.attachments || []
+        const atts = (m.attachments || []).filter(a => !a.shownInline)
         const html = m.bodyRich || ""
         const urls = []
         let match
@@ -344,13 +344,14 @@ Rectangle {
                     elide: Text.ElideRight
                 }
 
-                // attachment chips
+                // attachment chips — only cargo NOT already shown in the body
                 Flow {
                     width: parent.width
                     spacing: 6
-                    visible: (modelData.attachments || []).length > 0
+                    readonly property var chipAtts: (modelData.attachments || []).filter(a => !a.shownInline)
+                    visible: chipAtts.length > 0
                     Repeater {
-                        model: modelData.attachments || []
+                        model: parent.chipAtts
                         Rectangle {
                             id: attChip
                             required property var modelData

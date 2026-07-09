@@ -235,11 +235,21 @@ func (d *daemon) handle(conn net.Conn, cmd command) {
 				html = imgcache.RewriteRemote(ctx, html)
 				html = rewriteCids(ctx, p, m, html)
 			}
+			rich := sanitize.Rich(html, m.BodyText)
+			atts := append([]provider.Attachment(nil), m.Attachments...)
+			for i := range atts {
+				if atts[i].ContentID == "" {
+					continue
+				}
+				if cp := imgcache.Lookup(imgcache.Key("cid:" + m.ID + ":" + atts[i].ContentID)); cp != "" && strings.Contains(rich, cp) {
+					atts[i].ShownInline = true
+				}
+			}
 			out = append(out, map[string]any{
 				"id": m.ID, "convId": m.ConvID, "from": m.From, "to": m.To, "cc": m.Cc,
 				"subject": m.Subject, "snippet": m.Snippet, "date": m.Date,
-				"unread": m.Unread, "starred": m.Starred, "attachments": m.Attachments,
-				"bodyRich": sanitize.Rich(html, m.BodyText),
+				"unread": m.Unread, "starred": m.Starred, "attachments": atts,
+				"bodyRich": rich,
 				"hasHtml":  strings.TrimSpace(m.BodyHTML) != "",
 			})
 		}

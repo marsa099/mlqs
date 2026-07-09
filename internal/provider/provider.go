@@ -30,6 +30,9 @@ type Attachment struct {
 	Size      int64  `json:"size"`
 	Inline    bool   `json:"inline"`
 	ContentID string `json:"contentId"`
+	// set by the daemon when the image renders in the sanitized body —
+	// the UI hides its chip (no double listing)
+	ShownInline bool `json:"shownInline"`
 }
 
 type Message struct {
