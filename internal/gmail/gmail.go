@@ -75,7 +75,7 @@ func (c *Client) do(ctx context.Context, method, path string, q url.Values, body
 	if err != nil {
 		return err
 	}
-	if resp.StatusCode != 200 {
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		var e struct {
 			Error struct {
 				Message string `json:"message"`
@@ -85,7 +85,7 @@ func (c *Client) do(ctx context.Context, method, path string, q url.Values, body
 		debuglog.API("gmail %s %s -> %d %s", method, path, resp.StatusCode, e.Error.Message)
 		return &apiError{status: resp.StatusCode, msg: e.Error.Message}
 	}
-	if out != nil {
+	if out != nil && len(rb) > 0 {
 		return json.Unmarshal(rb, out)
 	}
 	return nil
@@ -665,3 +665,77 @@ func buildMIME(d provider.Draft, replyMsgID string) ([]byte, error) {
 }
 
 var _ provider.Provider = (*Client)(nil)
+
+// ---- triage helpers ----
+
+// EstimateThreads sizes a search without fetching it (Gmail's estimate —
+// rough above ~1000 but fine for bucket planning).
+func (c *Client) EstimateThreads(ctx context.Context, query string) (int, error) {
+	q := url.Values{"q": {query}, "maxResults": {"1"}, "fields": {"resultSizeEstimate"}}
+	var out struct {
+		ResultSizeEstimate int `json:"resultSizeEstimate"`
+	}
+	if err := c.get(ctx, "/threads", q, &out); err != nil {
+		return 0, err
+	}
+	return out.ResultSizeEstimate, nil
+}
+
+// ListMessageIDs pages through message ids matching a query, up to max.
+func (c *Client) ListMessageIDs(ctx context.Context, query string, max int) ([]string, error) {
+	var ids []string
+	pageToken := ""
+	for len(ids) < max {
+		q := url.Values{"q": {query}, "maxResults": {"500"}, "fields": {"messages/id,nextPageToken"}}
+		if pageToken != "" {
+			q.Set("pageToken", pageToken)
+		}
+		var out struct {
+			Messages []struct {
+				ID string `json:"id"`
+			} `json:"messages"`
+			NextPageToken string `json:"nextPageToken"`
+		}
+		if err := c.get(ctx, "/messages", q, &out); err != nil {
+			return ids, err
+		}
+		for _, m := range out.Messages {
+			ids = append(ids, m.ID)
+		}
+		if out.NextPageToken == "" {
+			break
+		}
+		pageToken = out.NextPageToken
+	}
+	if len(ids) > max {
+		ids = ids[:max]
+	}
+	return ids, nil
+}
+
+// BatchModify applies label changes to up to 1000 message ids per call.
+func (c *Client) BatchModify(ctx context.Context, ids, add, remove []string) error {
+	for start := 0; start < len(ids); start += 1000 {
+		end := min(start+1000, len(ids))
+		body := map[string]any{"ids": ids[start:end]}
+		if len(add) > 0 {
+			body["addLabelIds"] = add
+		}
+		if len(remove) > 0 {
+			body["removeLabelIds"] = remove
+		}
+		if err := c.post(ctx, "/messages/batchModify", body, nil); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// SearchPage is Search with an explicit cursor, for paging a triage scan.
+func (c *Client) SearchPage(ctx context.Context, query, cursor string, limit int) (provider.Page, error) {
+	q := url.Values{"q": {query}}
+	if cursor != "" {
+		q.Set("pageToken", cursor)
+	}
+	return c.threadPage(ctx, q, limit)
+}
