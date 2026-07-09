@@ -6,14 +6,41 @@ Rectangle {
     color: Theme.bg
     property bool active: true
 
+    // convs is a JS array, so every mutation resets the ListView model (and
+    // its currentIndex). Remember the cursor by thread id and restore after
+    // each change — clamp to the same position when the row got removed.
+    property string _cursorId: ""
+    property int _cursorPos: 0
+    function remember() {
+        _cursorPos = list.currentIndex
+        const c = current()
+        _cursorId = c ? c.id : ""
+    }
+    Connections {
+        target: Backend
+        function onConvsChanged() { Qt.callLater(idx._restoreCursor) }
+        function onCurrentFolderIdChanged() { idx._cursorId = ""; idx._cursorPos = 0 }
+    }
+    function _restoreCursor() {
+        if (list.count === 0) return
+        let i = _cursorId !== "" ? Backend.convs.findIndex(x => x.id === _cursorId) : -1
+        if (i < 0) i = Math.max(0, Math.min(_cursorPos, list.count - 1))
+        const dur = list.highlightMoveDuration
+        list.highlightMoveDuration = 0
+        list.currentIndex = i
+        list.highlightMoveDuration = dur
+        remember()
+    }
+
     function move(d) {
         if (list.count === 0) return
         list.currentIndex = Math.max(0, Math.min(list.count - 1, list.currentIndex + d))
+        remember()
         if (list.currentIndex >= list.count - 8) Backend.loadMore()
     }
     function page(d) { move(d * Math.max(3, Math.floor(list.height / 40 / 2))) }
-    function toTop() { list.currentIndex = 0 }
-    function toEnd() { list.currentIndex = list.count - 1 }
+    function toTop() { list.currentIndex = 0; remember() }
+    function toEnd() { list.currentIndex = list.count - 1; remember() }
     function current() { return Backend.convs[list.currentIndex] }
     function open() { Backend.openConv(current()) }
 
@@ -159,7 +186,7 @@ Rectangle {
             }
 
             TapHandler {
-                onTapped: { list.currentIndex = index; idx.open() }
+                onTapped: { list.currentIndex = index; idx.remember(); idx.open() }
             }
         }
     }
