@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import "."
 
 // Folder sidebar in the chat clients' visual language: inverted ink-pill
@@ -10,11 +11,6 @@ Rectangle {
     property int sel: 0
     opacity: active ? 1.0 : 0.8
     Behavior on opacity { NumberAnimation { duration: 120 } }
-
-    readonly property var roleGlyph: ({
-        inbox: "󰚇", starred: "", sent: "󰗍", drafts: "󰙏",
-        spam: "󱚝", trash: "󰩺", label: "󰓹"
-    })
 
     // labels are clutter by default; the section header toggles
     property bool labelsCollapsed: true
@@ -115,14 +111,21 @@ Rectangle {
             anchors.fill: parent
             anchors.leftMargin: bar.active ? 36 : 18
             spacing: 7
-            Text {
-                renderType: Text.NativeRendering
+            Item {
+                width: 16; height: 16
                 anchors.verticalCenter: parent.verticalCenter
-                width: 14
-                text: "󰻞"
-                color: threadsRow.primary ? Theme.bg : Theme.fg_muted
-                font.family: Theme.fontFamily; font.hintingPreference: Font.PreferNoHinting
-                font.pixelSize: 13
+                Image {
+                    id: thImg
+                    anchors.fill: parent
+                    source: "assets/threads.svg"
+                    sourceSize.width: 32; sourceSize.height: 32
+                    visible: false
+                }
+                MultiEffect {
+                    anchors.fill: thImg; source: thImg
+                    colorization: 1
+                    colorizationColor: threadsRow.primary ? Theme.bg : Theme.fg_muted
+                }
             }
             Text {
                 renderType: Text.NativeRendering
@@ -234,16 +237,23 @@ Rectangle {
                 anchors.leftMargin: bar.active ? 36 : 18
                 anchors.rightMargin: 8 + (modelData.unread > 0 ? 38 : 0)
                 spacing: 7
-                Text {
-                    renderType: Text.NativeRendering
+                Item {
                     id: glyph
+                    width: 16; height: 16
                     anchors.verticalCenter: parent.verticalCenter
-                    width: 14
-                    text: bar.roleGlyph[modelData.role] || "󰓹"
-                    color: row.primary ? Theme.bg
-                         : modelData.role === "starred" ? Theme.yellow : Theme.fg_muted
-                    font.family: Theme.fontFamily; font.hintingPreference: Font.PreferNoHinting
-                    font.pixelSize: 13
+                    Image {
+                        id: gImg
+                        anchors.fill: parent
+                        source: "assets/" + modelData.role + ".svg"
+                        sourceSize.width: 32; sourceSize.height: 32
+                        visible: false
+                    }
+                    MultiEffect {
+                        anchors.fill: gImg; source: gImg
+                        colorization: 1
+                        colorizationColor: row.primary ? Theme.bg
+                             : modelData.role === "starred" ? Theme.yellow : Theme.fg_muted
+                    }
                 }
                 Text {
                     renderType: Text.NativeRendering

@@ -208,7 +208,7 @@ Singleton {
             date: new Date().toISOString(), unread: false, starred: false,
             attachments: [],
             bodyRich: '<div style="line-height:140%">' + esc + "</div>",
-            hasHtml: false, sending: true
+            hasHtml: false, sending: true, local: true
         }])
     }
 

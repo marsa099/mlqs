@@ -55,9 +55,14 @@ Rectangle {
         const w = Backend.workspaces.find(x => x.id === Backend.currentAccount)
         return w && w.email ? w.email.toLowerCase() : ""
     }
+    function _lastReal() {
+        for (let i = Backend.messages.length - 1; i >= 0; i--)
+            if (!Backend.messages[i].local) return Backend.messages[i]
+        return null
+    }
     function targetMsg() {
-        return Backend.messages.find(m => m.id === cv.replyTargetId)
-            || Backend.messages[Backend.messages.length - 1] || null
+        const hit = Backend.messages.find(m => m.id === cv.replyTargetId)
+        return (hit && !hit.local) ? hit : _lastReal()
     }
     function replyTargetName() {
         const t = targetMsg()
@@ -67,7 +72,7 @@ Rectangle {
     function focusReply() { replyInput.forceActiveFocus() }
     function replyToFocused() {
         const m = Backend.messages[list.currentIndex]
-        if (!m) return
+        if (!m || m.local) return
         replyTargetId = m.id
         focusReply()
     }
@@ -225,7 +230,8 @@ Rectangle {
         target: Backend
         function onMessagesChanged() {
             if (Backend.messages.length === 0) return
-            const t = Backend.messages[Backend.messages.length - 1]
+            const t = cv._lastReal()
+            if (!t) return
             cv.replyTargetId = t.id
             // default to reply-all when the newest message had an audience
             cv.replyAll = ((t.to || []).length + (t.cc || []).length) > 1
