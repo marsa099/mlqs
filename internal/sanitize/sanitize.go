@@ -49,7 +49,7 @@ var doubleEnt = strings.NewReplacer(
 
 // Text renders a plain-text body as rich text (escaped, line breaks kept).
 func Text(s string) string {
-	return strings.ReplaceAll(stdhtml.EscapeString(s), "\n", "<br>")
+	return `<div style="line-height:140%">` + strings.ReplaceAll(stdhtml.EscapeString(s), "\n", "<br>") + "</div>"
 }
 
 // Rich picks the best body: sanitized HTML when present, else escaped text.
@@ -80,8 +80,16 @@ func children(n *xhtml.Node, b *strings.Builder) {
 	}
 }
 
+var leadedBlocks = map[string]bool{
+	"p": true, "div": true, "li": true, "blockquote": true, "pre": true, "h3": true,
+}
+
 func wrap(n *xhtml.Node, b *strings.Builder, tag string) {
-	b.WriteString("<" + tag + ">")
+	if leadedBlocks[tag] {
+		b.WriteString(`<` + tag + ` style="line-height:140%">`)
+	} else {
+		b.WriteString("<" + tag + ">")
+	}
 	children(n, b)
 	b.WriteString("</" + tag + ">")
 }
@@ -183,12 +191,12 @@ func rowHTML(n *xhtml.Node, b *strings.Builder) {
 	switch {
 	case len(cells) == 0:
 	case len(cells) == 1:
-		b.WriteString("<div>" + cells[0] + "</div>")
+		b.WriteString(`<div style="line-height:140%">` + cells[0] + "</div>")
 	case inlineOK:
-		b.WriteString("<div>" + strings.Join(cells, "&nbsp;&nbsp;") + "</div>")
+		b.WriteString(`<div style="line-height:140%">` + strings.Join(cells, "&nbsp;&nbsp;") + "</div>")
 	default:
 		for _, c := range cells {
-			b.WriteString("<div>" + c + "</div>")
+			b.WriteString(`<div style="line-height:140%">` + c + "</div>")
 		}
 	}
 }

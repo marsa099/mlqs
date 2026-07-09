@@ -45,76 +45,18 @@ Rectangle {
 
     property string hintBaseHtml: ""
 
-    // The REAL picker-chin keycap (rounded, hairline border) — rich text can't
-    // draw that inline, so the KeyCap component is rendered to tiny cached
-    // images (per label/theme, 2x for hidpi) and inlined as <img>.
-    property var capCache: ({})
-    Item {
-        width: 0; height: 0; clip: true
-        Rectangle {
-            id: capProto
-            property bool dim: false
-            radius: 5
-            border.width: dim ? 0 : 1
-            border.color: Theme.hairline
-            color: dim ? "transparent" : (Theme.mode === "light" ? Theme.bg : Theme.surface2)
-            // keycap proportions: wider than tall, gentle radius — not a pebble
-            width: Math.max(capText.implicitWidth + 11, 20)
-            height: 18
-            Text {
-                id: capText
-                anchors.centerIn: parent
-                // family spec (KeybindHelp caps): mono letter, plain fg ink
-                color: capProto.dim ? Theme.fg_muted : Theme.fg
-                font.family: Theme.fontFamily; font.pixelSize: 12; font.weight: 500
-                renderType: Text.NativeRendering
-            }
-        }
-    }
-    function _capKey(label, dim) { return Theme.mode + (dim ? "-d-" : "-n-") + label }
-    function _ensureCaps(labels, done) {
-        const missing = []
-        for (const l of labels) {
-            if (!capCache[_capKey(l, false)]) missing.push([l, false])
-            if (!capCache[_capKey(l, true)]) missing.push([l, true])
-        }
-        function next() {
-            if (missing.length === 0) { done(); return }
-            const pair = missing.shift()
-            const l = pair[0], dim = pair[1]
-            capProto.dim = dim; capText.text = l
-            Qt.callLater(() => {
-                const w = capProto.width, h = capProto.height
-                // grab at the REAL device pixel ratio — a hardcoded 2x gets
-                // downscaled on 1x screens and blurs the border/letter
-                const dpr = cv.Screen.devicePixelRatio || 1
-                capProto.grabToImage(res => {
-                    const p = Quickshell.env("XDG_RUNTIME_DIR") + "/mlqs-cap-" + cv._capKey(l, dim) + ".png"
-                    if (res.saveToFile(p)) {
-                        const m = Object.assign({}, cv.capCache)
-                        m[cv._capKey(l, dim)] = { path: p, w: w }
-                        cv.capCache = m
-                    }
-                    next()
-                }, Qt.size(Math.round(w * dpr), Math.round(h * dpr)))
-            })
-        }
-        next()
-    }
-    function _badge(label, dim) {
-        const c = capCache[_capKey(label, dim)]
-        if (!c)
-            return '<span style="color:' + Theme.fg_muted + ';font-size:12px;">&nbsp;' + label + '&nbsp;</span>&#8202;'
-        return '<img src="file://' + c.path + '" width="' + c.w + '" style="vertical-align: middle">&#8201;'
+    // Hint geometry: the hinted text reserves transparent inline gaps; an
+    // invisible TextEdit mirror of the SAME document yields each gap's pixel
+    // rect, and real KeyCap components draw there. Vector-crisp on every
+    // display scale (raster grabs can't serve a 1.75x laptop + 1.0x monitor).
+    property var hintRects: []
+    function _reserved(label) {
+        return '\u200B<span style="color:transparent;">&nbsp;' + label + '&nbsp;</span>'
     }
     function _renderHints() {
         let k = 0
         _hintRe.lastIndex = 0
-        hintedHtml = hintBaseHtml.replace(_hintRe, tag => {
-            const lab = hintLabels[k++]
-            const dim = hintBuf !== "" && lab.indexOf(hintBuf) !== 0
-            return _badge(lab, dim) + tag
-        })
+        hintedHtml = hintBaseHtml.replace(_hintRe, tag => _reserved(hintLabels[k++]) + tag)
     }
     function startHints() {
         const m = Backend.messages[list.currentIndex]
@@ -134,12 +76,12 @@ Rectangle {
                 for (let j = 0; j < A.length && labels.length < targets.length; j++)
                     labels.push(A[i] + A[j])
         }
-        hintTargets = targets; hintLabels = labels; hintBaseHtml = html
-        const at = list.currentIndex
-        _ensureCaps(labels, () => {
-            hintIndex = at; hintBuf = ""; hinting = true
-            _renderHints()
-        })
+        hintTargets = targets; hintLabels = labels
+        hintBaseHtml = html.replace(/\u200B/g, "")
+        hintRects = []
+        hintIndex = list.currentIndex; hintBuf = ""
+        _renderHints()
+        hinting = true
     }
     function cancelHints() { hinting = false; hintBuf = ""; hintIndex = -1 }
     function hintKey(ch) {
@@ -151,10 +93,8 @@ Rectangle {
             Qt.openUrlExternally(url)
             return
         }
-        if (hintLabels.some(l => l.indexOf(buf) === 0)) {
-            hintBuf = buf
-            _renderHints()
-        } else cancelHints()
+        if (hintLabels.some(l => l.indexOf(buf) === 0)) hintBuf = buf
+        else cancelHints()
     }
     Connections {
         target: Backend
@@ -189,6 +129,8 @@ Rectangle {
         model: Backend.messages
         clip: true
         spacing: 10
+        topMargin: 12
+        bottomMargin: 12
         boundsBehavior: Flickable.StopAtBounds
         highlightMoveDuration: 60
 
@@ -277,6 +219,7 @@ Rectangle {
                 }
 
                 Text {
+                    id: bodyText
                     renderType: Text.NativeRendering
                     width: parent.width
                     textFormat: Text.RichText
@@ -287,10 +230,65 @@ Rectangle {
                     font.family: Theme.fontFamily
                     font.hintingPreference: Font.PreferNoHinting
                     font.pixelSize: 14
-                    // mono at default leading reads cramped — the readability fix
-                    lineHeight: 1.4
-                    lineHeightMode: Text.ProportionalHeight
                     onLinkActivated: link => Qt.openUrlExternally(link)
+
+                    // invisible layout twin: same document, same width, same
+                    // font — its positionToRectangle locates the reserved gaps
+                    TextEdit {
+                        id: geom
+                        visible: false
+                        width: bodyText.width
+                        textFormat: TextEdit.RichText
+                        wrapMode: TextEdit.Wrap
+                        font: bodyText.font
+                        text: bodyText.text
+                    }
+                    function computeRects() {
+                        if (!(cv.hinting && index === cv.hintIndex)) return
+                        const doc = geom.getText(0, geom.length)
+                        const rects = []
+                        let from = 0
+                        for (let k = 0; k < cv.hintLabels.length; k++) {
+                            const p = doc.indexOf("\u200B", from)
+                            if (p < 0) break
+                            from = p + 1
+                            const lab = cv.hintLabels[k]
+                            const r1 = geom.positionToRectangle(p + 1)
+                            const r2 = geom.positionToRectangle(p + 1 + lab.length + 2)
+                            rects.push({ x: r1.x, y: r1.y, w: Math.max(r2.x - r1.x, 18), h: r1.height, label: lab })
+                        }
+                        cv.hintRects = rects
+                    }
+                    Connections {
+                        target: cv
+                        function onHintingChanged() {
+                            if (cv.hinting && index === cv.hintIndex) Qt.callLater(bodyText.computeRects)
+                        }
+                    }
+
+                    // the real KeyCap, drawn live — family spec, crisp at any scale
+                    Repeater {
+                        model: (cv.hinting && index === cv.hintIndex) ? cv.hintRects : []
+                        delegate: Rectangle {
+                            required property var modelData
+                            readonly property bool dim: cv.hintBuf !== "" && modelData.label.indexOf(cv.hintBuf) !== 0
+                            x: modelData.x + 1
+                            y: modelData.y + (modelData.h - height) / 2
+                            width: modelData.w - 2
+                            height: 18
+                            radius: 5
+                            border.width: dim ? 0 : 1
+                            border.color: Theme.hairline
+                            color: dim ? "transparent" : (Theme.mode === "light" ? Theme.bg : Theme.surface2)
+                            Text {
+                                anchors.centerIn: parent
+                                text: parent.modelData.label
+                                color: parent.dim ? Theme.fg_muted : Theme.fg
+                                font.family: Theme.fontFamily; font.pixelSize: 12; font.weight: 500
+                                renderType: Text.NativeRendering
+                            }
+                        }
+                    }
                 }
             }
         }
