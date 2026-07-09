@@ -64,6 +64,8 @@ func (n *Notifier) handleClosed(sig *enotify.NotificationClosedSignal) {
 	n.mu.Unlock()
 }
 
+func (n *Notifier) Connected() bool { return n.conn != nil }
+
 func (n *Notifier) Notify(key, title, body string) {
 	if n.conn == nil {
 		exec.Command("notify-send", "-a", "mlqs", "-i", "mail-unread", title, body).Start()

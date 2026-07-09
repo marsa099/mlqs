@@ -531,6 +531,7 @@ func main() {
 
 	// notification default-action → deep-link the UI to the conversation
 	d.notifier = notify.New(func(key string) {
+		debuglog.Gen("notify action invoked: %s", key)
 		var k struct {
 			A, ID, S string
 		}
