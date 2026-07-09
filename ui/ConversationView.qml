@@ -121,6 +121,7 @@ Rectangle {
         if (!/^re:/i.test(subj)) subj = "Re: " + subj
         Backend.sendMail({ to: r.to.join(", "), cc: r.cc.join(", "), subject: subj,
                            body: text, replyTo: t.id, conv: Backend.openConvId })
+        Backend.appendLocalMessage({ subject: subj, body: text })
         replyInput.clear()
         cv.exitInsert()
     }

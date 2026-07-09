@@ -194,6 +194,24 @@ Singleton {
         if (currentFolderId !== "") selectFolder(currentFolderId, currentFolderName)
     }
 
+    // optimistic echo: a sent reply appears in the open conversation
+    // immediately (chat-client behavior), not after the next sync
+    function appendLocalMessage(d) {
+        if (openConvId === "") return
+        const me = workspaces.find(w => w.id === currentAccount) || {}
+        const esc = (d.body || "").replace(/&/g, "&amp;").replace(/</g, "&lt;")
+            .replace(/\n/g, "<br>")
+        messages = messages.concat([{
+            id: "local-" + Date.now(), convId: openConvId,
+            from: { name: "me", email: me.email || "" },
+            to: [], cc: [], subject: d.subject || "", snippet: "",
+            date: new Date().toISOString(), unread: false, starred: false,
+            attachments: [],
+            bodyRich: '<div style="line-height:140%">' + esc + "</div>",
+            hasHtml: false
+        }])
+    }
+
     function sendMail(d) {
         send({ type: "send", account: currentAccount,
                to: d.to || "", cc: d.cc || "", bcc: d.bcc || "",
