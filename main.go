@@ -130,7 +130,7 @@ func (d *daemon) serve(conn net.Conn) {
 		switch cmd.Type {
 		case "ping":
 			d.sendTo(conn, map[string]any{"type": "pong"})
-		case "folders", "conversations", "conversation", "openhtml", "search", "markread", "star", "archive", "trash", "send":
+		case "folders", "conversations", "conversation", "openhtml", "search", "threads", "markread", "star", "archive", "trash", "send":
 			go d.handle(conn, cmd)
 		default:
 			d.sendTo(conn, map[string]any{"type": "toast",
@@ -268,6 +268,45 @@ func (d *daemon) handle(conn net.Conn, cmd command) {
 			return
 		}
 		d.sendTo(conn, map[string]any{"type": "toast", "text": "no html body to open"})
+	case "threads":
+		// mail Threads = conversations I participate in: unread ones first
+		// (loud), then recently-active read ones — across all folders
+		acct, _ := d.cfg.Account(cmd.Account)
+		me := strings.ToLower(acct.Email)
+		var unreadPg, minePg provider.Page
+		var uerr, merr error
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() { defer wg.Done(); unreadPg, uerr = p.Search(ctx, "is:unread", 50) }()
+		go func() { defer wg.Done(); minePg, merr = p.Search(ctx, "from:me newer_than:14d", 50) }()
+		wg.Wait()
+		if uerr != nil && merr != nil {
+			fail(uerr)
+			return
+		}
+		hasMe := func(c provider.Conversation) bool {
+			for _, s := range c.Senders {
+				if strings.EqualFold(s.Email, me) {
+					return true
+				}
+			}
+			return false
+		}
+		seen := map[string]bool{}
+		var items []provider.Conversation
+		for _, c := range unreadPg.Conversations {
+			if c.Unread && hasMe(c) {
+				seen[c.ID] = true
+				items = append(items, c)
+			}
+		}
+		for _, c := range minePg.Conversations {
+			if !seen[c.ID] {
+				items = append(items, c)
+			}
+		}
+		d.sendTo(conn, map[string]any{"type": "conversations", "account": cmd.Account,
+			"folder": "__threads", "items": items, "next": ""})
 	case "search":
 		pg, err := p.Search(ctx, cmd.Query, 50)
 		if err != nil {

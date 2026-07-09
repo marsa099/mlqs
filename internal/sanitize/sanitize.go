@@ -49,7 +49,25 @@ var doubleEnt = strings.NewReplacer(
 
 // Text renders a plain-text body as rich text (escaped, line breaks kept).
 func Text(s string) string {
-	return `<div style="line-height:140%">` + strings.ReplaceAll(stdhtml.EscapeString(s), "\n", "<br>") + "</div>"
+	lines := strings.Split(s, "\n")
+	var out []string
+	inQuote := false
+	for _, l := range lines {
+		if strings.HasPrefix(strings.TrimSpace(l), ">") {
+			if !inQuote {
+				out = append(out, "<i>&#8942; quoted history</i>")
+				inQuote = true
+			}
+			continue
+		}
+		if strings.TrimSpace(l) != "" {
+			inQuote = false
+		}
+		if !inQuote {
+			out = append(out, stdhtml.EscapeString(l))
+		}
+	}
+	return `<div style="line-height:140%">` + strings.Join(out, "<br>") + "</div>"
 }
 
 // Rich picks the best body: sanitized HTML when present, else escaped text.
@@ -67,6 +85,18 @@ func attr(n *xhtml.Node, name string) string {
 		}
 	}
 	return ""
+}
+
+const quoteMarker = `<div style="line-height:140%"><i>&#8942; quoted history</i></div>`
+
+// quoted detects the quoted-reply-history containers mail clients embed in
+// every reply (Gmail gmail_quote, Outlook divRplyFwdMsg, Thunderbird cite
+// prefix) — rendering them repeats the whole thread inside each message.
+func quoted(n *xhtml.Node) bool {
+	c := strings.ToLower(attr(n, "class"))
+	id := strings.ToLower(attr(n, "id"))
+	return strings.Contains(c, "gmail_quote") || strings.Contains(c, "moz-cite-prefix") ||
+		strings.Contains(c, "quoted-text") || id == "divrplyfwdmsg" || id == "isforwardcontent"
 }
 
 func hidden(n *xhtml.Node) bool {
@@ -106,6 +136,10 @@ func render(n *xhtml.Node, b *strings.Builder) {
 			return
 		}
 		if hidden(n) {
+			return
+		}
+		if quoted(n) {
+			b.WriteString(quoteMarker)
 			return
 		}
 		switch n.Data {

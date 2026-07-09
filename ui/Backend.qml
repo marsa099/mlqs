@@ -61,7 +61,16 @@ Singleton {
         send({ type: "folders", account: id })
     }
 
+    function selectThreads() {
+        currentFolderId = "__threads"; currentFolderName = "Threads"
+        convsModel.clear(); nextCursor = ""; pendingCursor = ""
+        openConvId = ""; messages = []
+        loadingConvs = true
+        send({ type: "threads", account: currentAccount })
+    }
+
     function selectFolder(id, name) {
+        if (id === "__threads") { selectThreads(); return }
         currentFolderId = id; currentFolderName = name || id
         convsModel.clear(); nextCursor = ""; pendingCursor = ""
         openConvId = ""; messages = []
@@ -202,6 +211,7 @@ Singleton {
         } else if (e.type === "conversations") {
             loadingConvs = false
             if (e.account !== currentAccount) return
+            if ((e.folder || "") !== currentFolderId) return
             const items = e.items || []
             if (pendingCursor !== "") pendingCursor = ""
             else convsModel.clear()
@@ -212,6 +222,7 @@ Singleton {
             if (e.id === openConvId) messages = e.messages || []
         } else if (e.type === "convUpdated") {
             if (e.account !== currentAccount || !e.conv) return
+            if (currentFolderId === "__threads") return
             const c = e.conv
             const inFolder = currentFolderId !== "" && (c.folderIds || []).indexOf(currentFolderId) >= 0
             const row = toRow(c)

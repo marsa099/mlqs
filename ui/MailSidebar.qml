@@ -16,18 +16,21 @@ Rectangle {
         spam: "󱚝", trash: "󰩺", label: "󰓹"
     })
 
+    // sel === -1 is the pinned Threads row (chat parity: virtual top item)
     function move(d) {
         if (Backend.folders.length === 0) return
-        sel = Math.max(0, Math.min(Backend.folders.length - 1, sel + d))
-        list.positionViewAtIndex(sel, ListView.Contain)
+        sel = Math.max(-1, Math.min(Backend.folders.length - 1, sel + d))
+        if (sel >= 0) list.positionViewAtIndex(sel, ListView.Contain)
     }
     function choose() {
+        if (sel === -1) { Backend.selectThreads(); return }
         const f = Backend.folders[sel]
         if (f) Backend.selectFolder(f.id, f.name)
     }
     Connections {
         target: Backend
         function onCurrentFolderIdChanged() {
+            if (Backend.currentFolderId === "__threads") { bar.sel = -1; return }
             const i = Backend.folders.findIndex(f => f.id === Backend.currentFolderId)
             if (i >= 0) bar.sel = i
         }
@@ -81,9 +84,59 @@ Rectangle {
         }
     }
 
+    // pinned Threads: conversations you participate in, across all folders
+    Item {
+        id: threadsRow
+        anchors { top: acctHeader.bottom; topMargin: 6; left: parent.left; right: parent.right }
+        height: 36
+        readonly property bool isOpen: Backend.currentFolderId === "__threads"
+        readonly property bool primary: bar.active && bar.sel === -1
+        Rectangle {
+            anchors.fill: parent
+            anchors.leftMargin: 6; anchors.rightMargin: 6
+            radius: height / 2
+            color: threadsRow.primary ? Theme.fg
+                 : (threadsRow.isOpen && !bar.active ? Qt.rgba(Theme.fg.r, Theme.fg.g, Theme.fg.b, 0.06)
+                           : hovT.hovered ? Qt.rgba(Theme.fg.r, Theme.fg.g, Theme.fg.b, 0.04) : "transparent")
+        }
+        HoverHandler { id: hovT }
+        Rectangle {
+            visible: bar.active && bar.sel === -1
+            anchors.left: parent.left; anchors.leftMargin: 20
+            anchors.verticalCenter: parent.verticalCenter
+            width: 3; height: 16; radius: 2; color: Theme.cursor
+        }
+        Row {
+            anchors.fill: parent
+            anchors.leftMargin: bar.active ? 36 : 18
+            spacing: 7
+            Text {
+                renderType: Text.NativeRendering
+                anchors.verticalCenter: parent.verticalCenter
+                width: 14
+                text: "󰻞"
+                color: threadsRow.primary ? Theme.bg : Theme.fg_muted
+                font.family: Theme.fontFamily; font.hintingPreference: Font.PreferNoHinting
+                font.pixelSize: 13
+            }
+            Text {
+                renderType: Text.NativeRendering
+                anchors.verticalCenter: parent.verticalCenter
+                text: "Threads"
+                color: threadsRow.primary ? Theme.bg
+                     : (threadsRow.isOpen || bar.sel === -1) ? Theme.fg : Theme.dimmedFg
+                font.family: Theme.fontFamily; font.hintingPreference: Font.PreferNoHinting
+                font.pixelSize: 14
+            }
+        }
+        TapHandler {
+            onTapped: { bar.sel = -1; Backend.selectThreads() }
+        }
+    }
+
     ListView {
         id: list
-        anchors { top: acctHeader.bottom; topMargin: 4; left: parent.left; right: parent.right; bottom: parent.bottom }
+        anchors { top: threadsRow.bottom; topMargin: 2; left: parent.left; right: parent.right; bottom: parent.bottom }
         model: Backend.folders
         clip: true
         boundsBehavior: Flickable.StopAtBounds
