@@ -280,7 +280,8 @@ func (d *daemon) handle(conn net.Conn, cmd command) {
 		d.sendTo(conn, map[string]any{"type": "toast", "text": "no html body to open"})
 	case "threads":
 		// mail Threads = conversations I participate in: unread ones first
-		// (loud), then recently-active read ones — across all folders
+		// (loud), then the 50 most recently-active threads containing my
+		// mail — across all folders, no time window
 		acct, _ := d.cfg.Account(cmd.Account)
 		me := strings.ToLower(acct.Email)
 		var unreadPg, minePg provider.Page
@@ -288,7 +289,7 @@ func (d *daemon) handle(conn net.Conn, cmd command) {
 		var wg sync.WaitGroup
 		wg.Add(2)
 		go func() { defer wg.Done(); unreadPg, uerr = p.Search(ctx, "is:unread", 50) }()
-		go func() { defer wg.Done(); minePg, merr = p.Search(ctx, "from:me newer_than:14d", 50) }()
+		go func() { defer wg.Done(); minePg, merr = p.Search(ctx, "from:me", 50) }()
 		wg.Wait()
 		if uerr != nil && merr != nil {
 			fail(uerr)

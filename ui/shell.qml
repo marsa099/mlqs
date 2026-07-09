@@ -340,6 +340,9 @@ FloatingWindow {
             case Qt.Key_O:
                 if (inConv) conv.openCurrentHtml()
                 break
+            case Qt.Key_Q:
+                if (inConv) Backend.closeConv()
+                break
             case Qt.Key_F:
                 if (inConv) conv.startHints()
                 break
