@@ -168,7 +168,7 @@ Rectangle {
                 anchors.left: parent.left; anchors.leftMargin: 24
                 // readable column: don't let body lines run the full window width
                 width: Math.min(parent.width - 48, 820)
-                spacing: 8
+                spacing: 12
 
                 Row {
                     spacing: 10
@@ -229,7 +229,10 @@ Rectangle {
                     color: Theme.fg_secondary
                     font.family: Theme.fontFamily
                     font.hintingPreference: Font.PreferNoHinting
-                    font.pixelSize: 13
+                    font.pixelSize: 14
+                    // mono at default leading reads cramped — the readability fix
+                    lineHeight: 1.4
+                    lineHeightMode: Text.ProportionalHeight
                     onLinkActivated: link => Qt.openUrlExternally(link)
                 }
             }

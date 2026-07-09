@@ -39,8 +39,13 @@ func HTML(s string) string {
 		}
 	}
 	out = reManyBr.ReplaceAllString(out, "<br><br>")
+	out = doubleEnt.Replace(out)
 	return strings.TrimSpace(out)
 }
+
+var doubleEnt = strings.NewReplacer(
+	"&amp;amp;", "&amp;", "&amp;lt;", "&lt;", "&amp;gt;", "&gt;",
+	"&amp;quot;", "&quot;", "&amp;#", "&#")
 
 // Text renders a plain-text body as rich text (escaped, line breaks kept).
 func Text(s string) string {
@@ -129,7 +134,9 @@ func render(n *xhtml.Node, b *strings.Builder) {
 			wrap(n, b, n.Data)
 		case "code":
 			wrap(n, b, "code")
-		case "p", "div", "section", "article", "aside", "main", "figure", "figcaption", "footer", "header":
+		case "p":
+			wrap(n, b, "p")
+		case "div", "section", "article", "aside", "main", "figure", "figcaption", "footer", "header":
 			wrap(n, b, "div")
 		case "table", "tbody", "thead", "tfoot":
 			children(n, b)
