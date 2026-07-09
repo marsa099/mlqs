@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Window
 import Quickshell
 import "."
 
@@ -53,18 +54,19 @@ Rectangle {
         Rectangle {
             id: capProto
             property bool dim: false
-            radius: 7
+            radius: 5
             border.width: dim ? 0 : 1
             border.color: Theme.hairline
             color: dim ? "transparent" : (Theme.mode === "light" ? Theme.bg : Theme.surface2)
-            width: capText.implicitWidth + 12
-            height: 20
+            // keycap proportions: wider than tall, gentle radius — not a pebble
+            width: Math.max(capText.implicitWidth + 11, 20)
+            height: 18
             Text {
                 id: capText
                 anchors.centerIn: parent
                 color: capProto.dim ? Theme.fg_muted
                      : Qt.tint(Theme.fg_muted, Qt.rgba(Theme.fg.r, Theme.fg.g, Theme.fg.b, 0.55))
-                font.family: Theme.fontFamily; font.pixelSize: 11; font.weight: 500
+                font.family: Theme.fontFamily; font.pixelSize: 12; font.weight: 500
                 renderType: Text.NativeRendering
             }
         }
@@ -83,6 +85,9 @@ Rectangle {
             capProto.dim = dim; capText.text = l
             Qt.callLater(() => {
                 const w = capProto.width, h = capProto.height
+                // grab at the REAL device pixel ratio — a hardcoded 2x gets
+                // downscaled on 1x screens and blurs the border/letter
+                const dpr = cv.Screen.devicePixelRatio || 1
                 capProto.grabToImage(res => {
                     const p = Quickshell.env("XDG_RUNTIME_DIR") + "/mlqs-cap-" + cv._capKey(l, dim) + ".png"
                     if (res.saveToFile(p)) {
@@ -91,7 +96,7 @@ Rectangle {
                         cv.capCache = m
                     }
                     next()
-                }, Qt.size(w * 2, h * 2))
+                }, Qt.size(Math.round(w * dpr), Math.round(h * dpr)))
             })
         }
         next()
@@ -100,7 +105,7 @@ Rectangle {
         const c = capCache[_capKey(label, dim)]
         if (!c)
             return '<span style="color:' + Theme.fg_muted + ';font-size:12px;">&nbsp;' + label + '&nbsp;</span>&#8202;'
-        return '<img src="file://' + c.path + '" width="' + c.w + '" style="vertical-align: middle">&#8202;'
+        return '<img src="file://' + c.path + '" width="' + c.w + '" style="vertical-align: middle">&#8201;'
     }
     function _renderHints() {
         let k = 0
