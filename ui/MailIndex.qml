@@ -40,10 +40,24 @@ Rectangle {
         anchors { top: header.bottom; left: parent.left; right: parent.right; bottom: parent.bottom }
         model: Backend.convs
         clip: true
+        boundsBehavior: Flickable.StopAtBounds
         highlightMoveDuration: 60
         preferredHighlightBegin: 80
         preferredHighlightEnd: height - 80
         highlightRangeMode: ListView.ApplyRange
+
+        // chat-client scroll feel: 5x wheel gain (Qt's default is treacle)
+        property real scrollGain: 5.0
+        WheelHandler {
+            acceptedDevices: PointerDevice.TouchPad | PointerDevice.Mouse
+            onWheel: e => {
+                const px = (e.pixelDelta.y !== 0) ? e.pixelDelta.y : e.angleDelta.y / 8
+                list.contentY -= px * list.scrollGain
+                list.returnToBounds()
+                if (list.contentY + list.height > list.contentHeight - 800) Backend.loadMore()
+                e.accepted = true
+            }
+        }
 
         delegate: Rectangle {
             required property var modelData

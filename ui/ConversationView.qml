@@ -59,7 +59,19 @@ Rectangle {
         model: Backend.messages
         clip: true
         spacing: 10
+        boundsBehavior: Flickable.StopAtBounds
         highlightMoveDuration: 60
+
+        property real scrollGain: 5.0
+        WheelHandler {
+            acceptedDevices: PointerDevice.TouchPad | PointerDevice.Mouse
+            onWheel: e => {
+                const px = (e.pixelDelta.y !== 0) ? e.pixelDelta.y : e.angleDelta.y / 8
+                list.contentY -= px * list.scrollGain
+                list.returnToBounds()
+                e.accepted = true
+            }
+        }
 
         delegate: Rectangle {
             required property var modelData

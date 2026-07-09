@@ -145,7 +145,8 @@ Singleton {
                 selectAccount(workspaces[0].id)
         } else if (e.type === "folders") {
             if (e.account !== currentAccount) return
-            folders = e.folders || []
+            folders = (e.folders || []).map(f =>
+                Object.assign({}, f, { section: f.role === "label" ? "labels" : "mailbox" }))
             if (currentFolderId === "") {
                 const inbox = folders.find(f => f.role === "inbox")
                 if (inbox) selectFolder(inbox.id, inbox.name)
