@@ -17,6 +17,36 @@ Rectangle {
     border.color: Qt.rgba(Theme.fg.r, Theme.fg.g, Theme.fg.b, Theme.mode === "light" ? 0.15 : 0.10)
 
     property int sel: 0   // 0 to · 1 cc · 2 subject · 3 body
+    // recipient autocomplete (chat Autocomplete grammar: fg tint + hairpin)
+    property var acItems: []
+    property int acSel: 0
+    property string acToken: ""
+    property var acInput: null
+    readonly property bool acOpen: acItems.length > 0 && acInput !== null
+    function acUpdate(input) {
+        acInput = input
+        const tok = input.text.split(",").pop().trim()
+        acToken = tok
+        if (tok.length >= 1 && input.activeFocus) Backend.queryContacts(tok)
+        else acItems = []
+    }
+    function acClose() { acItems = []; acInput = null }
+    function acAccept() {
+        if (!acOpen) return
+        const c = acItems[acSel]
+        const parts = acInput.text.split(",")
+        parts[parts.length - 1] = " " + c.email
+        acInput.text = parts.join(",").replace(/^ /, "") + ", "
+        acInput.cursorPosition = acInput.text.length
+        acClose()
+    }
+    Connections {
+        target: Backend
+        function onContactsResult(items, query) {
+            if (query !== comp.acToken || !comp.visible) return
+            comp.acItems = items; comp.acSel = 0
+        }
+    }
     readonly property bool editing: toField.input.activeFocus || ccField.input.activeFocus
                                     || subjField.input.activeFocus || bodyArea.activeFocus
     function focusSel() {
@@ -87,6 +117,18 @@ Rectangle {
     // shared keys for every field in the composer
     function handleKeys(e) {
         const ctrl = e.modifiers & Qt.ControlModifier
+        if (acOpen) {
+            if (e.key === Qt.Key_Escape) { acClose(); e.accepted = true; return true }
+            if (e.key === Qt.Key_Tab || e.key === Qt.Key_Return || e.key === Qt.Key_Enter) {
+                acAccept(); e.accepted = true; return true
+            }
+            if (ctrl && (e.key === Qt.Key_N || e.key === Qt.Key_J)) {
+                acSel = Math.min(acItems.length - 1, acSel + 1); e.accepted = true; return true
+            }
+            if (ctrl && (e.key === Qt.Key_P || e.key === Qt.Key_K)) {
+                acSel = Math.max(0, acSel - 1); e.accepted = true; return true
+            }
+        }
         if (e.key === Qt.Key_Escape) { compKeys.forceActiveFocus(); e.accepted = true; return true }
         if (ctrl && (e.key === Qt.Key_Return || e.key === Qt.Key_Enter)) { doSend(); e.accepted = true; return true }
         if (ctrl && e.key === Qt.Key_O) { attachClipboardPath(); e.accepted = true; return true }
@@ -121,6 +163,8 @@ Rectangle {
                 color: Theme.fg
                 font.family: Theme.fontFamily; font.pixelSize: 13
                 background: null
+                onTextChanged: if (parent.parent.idx < 2 && activeFocus) comp.acUpdate(input)
+                onActiveFocusChanged: if (!activeFocus) comp.acClose()
                 Keys.onPressed: e => comp.handleKeys(e)
             }
         }
@@ -196,6 +240,45 @@ Rectangle {
             }
         }
 
+    }
+
+    Rectangle {
+        visible: comp.acOpen
+        z: 50
+        x: 16
+        y: comp.acInput ? comp.acInput.parent.parent.mapToItem(comp, 0, comp.acInput.parent.parent.height).y + 4 : 0
+        width: 360
+        height: Math.min(comp.acItems.length, 6) * 32 + 8
+        radius: 9
+        color: Theme.bg_alt
+        border.width: 1
+        border.color: Qt.rgba(Theme.fg.r, Theme.fg.g, Theme.fg.b, Theme.mode === "light" ? 0.15 : 0.10)
+        Column {
+            anchors.fill: parent; anchors.margins: 4
+            Repeater {
+                model: comp.acItems
+                Rectangle {
+                    required property var modelData
+                    required property int index
+                    width: parent.width; height: 32; radius: 7
+                    color: index === comp.acSel
+                         ? Qt.rgba(Theme.fg.r, Theme.fg.g, Theme.fg.b, 0.08) : "transparent"
+                    border.width: 1
+                    border.color: index === comp.acSel ? Theme.hairline : "transparent"
+                    Row {
+                        anchors.fill: parent; anchors.leftMargin: 10; spacing: 8
+                        Text { renderType: Text.NativeRendering; anchors.verticalCenter: parent.verticalCenter
+                               text: modelData.name || modelData.email; color: Theme.fg
+                               font.family: Theme.fontFamily; font.pixelSize: 13 }
+                        Text { renderType: Text.NativeRendering; anchors.verticalCenter: parent.verticalCenter
+                               visible: !!modelData.name
+                               text: modelData.email; color: Theme.fg_muted
+                               font.family: Theme.fontFamily; font.pixelSize: 11 }
+                    }
+                    TapHandler { onTapped: { comp.acSel = index; comp.acAccept() } }
+                }
+            }
+        }
     }
 
     Item {
