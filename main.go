@@ -319,16 +319,29 @@ func (d *daemon) handle(conn net.Conn, cmd command) {
 			}
 			return false
 		}
+		// a thread is an EXCHANGE: multiple messages, or someone besides me —
+		// a sent mail nobody answered is a monologue, not a thread
+		dialogue := func(c provider.Conversation) bool {
+			if c.MsgCount > 1 {
+				return true
+			}
+			for _, s := range c.Senders {
+				if s.Email != "" && !strings.EqualFold(s.Email, me) {
+					return true
+				}
+			}
+			return false
+		}
 		seen := map[string]bool{}
 		var items []provider.Conversation
 		for _, c := range unreadPg.Conversations {
-			if c.Unread && hasMe(c) && !junk(c) {
+			if c.Unread && hasMe(c) && dialogue(c) && !junk(c) {
 				seen[c.ID] = true
 				items = append(items, c)
 			}
 		}
 		for _, c := range minePg.Conversations {
-			if !seen[c.ID] && !junk(c) {
+			if !seen[c.ID] && dialogue(c) && !junk(c) {
 				items = append(items, c)
 			}
 		}
