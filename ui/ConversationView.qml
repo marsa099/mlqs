@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell
 import "."
 
 Rectangle {
@@ -43,15 +44,63 @@ Rectangle {
 
     property string hintBaseHtml: ""
 
-    // Picker-chin keycap language: quiet surface chip, secondary ink, w500 —
-    // like the esc/enter caps, not the loud unread pill. Chips that can no
-    // longer match the typed prefix lose the chip and fade to muted.
+    // The REAL picker-chin keycap (rounded, hairline border) — rich text can't
+    // draw that inline, so the KeyCap component is rendered to tiny cached
+    // images (per label/theme, 2x for hidpi) and inlined as <img>.
+    property var capCache: ({})
+    Item {
+        width: 0; height: 0; clip: true
+        Rectangle {
+            id: capProto
+            property bool dim: false
+            radius: 7
+            border.width: dim ? 0 : 1
+            border.color: Theme.hairline
+            color: dim ? "transparent" : (Theme.mode === "light" ? Theme.bg : Theme.surface2)
+            width: capText.implicitWidth + 12
+            height: 20
+            Text {
+                id: capText
+                anchors.centerIn: parent
+                color: capProto.dim ? Theme.fg_muted
+                     : Qt.tint(Theme.fg_muted, Qt.rgba(Theme.fg.r, Theme.fg.g, Theme.fg.b, 0.55))
+                font.family: Theme.fontFamily; font.pixelSize: 11; font.weight: 500
+                renderType: Text.NativeRendering
+            }
+        }
+    }
+    function _capKey(label, dim) { return Theme.mode + (dim ? "-d-" : "-n-") + label }
+    function _ensureCaps(labels, done) {
+        const missing = []
+        for (const l of labels) {
+            if (!capCache[_capKey(l, false)]) missing.push([l, false])
+            if (!capCache[_capKey(l, true)]) missing.push([l, true])
+        }
+        function next() {
+            if (missing.length === 0) { done(); return }
+            const pair = missing.shift()
+            const l = pair[0], dim = pair[1]
+            capProto.dim = dim; capText.text = l
+            Qt.callLater(() => {
+                const w = capProto.width, h = capProto.height
+                capProto.grabToImage(res => {
+                    const p = Quickshell.env("XDG_RUNTIME_DIR") + "/mlqs-cap-" + cv._capKey(l, dim) + ".png"
+                    if (res.saveToFile(p)) {
+                        const m = Object.assign({}, cv.capCache)
+                        m[cv._capKey(l, dim)] = { path: p, w: w }
+                        cv.capCache = m
+                    }
+                    next()
+                }, Qt.size(w * 2, h * 2))
+            })
+        }
+        next()
+    }
     function _badge(label, dim) {
-        if (dim)
-            return '<span style="color:' + Theme.fg_muted
-                 + ';font-weight:500;font-size:12px;">&nbsp;' + label + '&nbsp;</span>&#8202;'
-        return '<span style="background-color:' + Theme.surface2 + ';color:' + Theme.fg_secondary
-             + ';font-weight:500;font-size:12px;">&nbsp;' + label + '&nbsp;</span>&#8202;'
+        const c = capCache[_capKey(label, dim)]
+        if (!c)
+            return '<span style="color:' + Theme.fg_muted + ';font-size:12px;">&nbsp;' + label + '&nbsp;</span>&#8202;'
+        return '<img src="file://' + c.path + '" width="' + c.w + '" style="vertical-align: middle">&#8202;'
     }
     function _renderHints() {
         let k = 0
@@ -81,8 +130,11 @@ Rectangle {
                     labels.push(A[i] + A[j])
         }
         hintTargets = targets; hintLabels = labels; hintBaseHtml = html
-        hintIndex = list.currentIndex; hintBuf = ""; hinting = true
-        _renderHints()
+        const at = list.currentIndex
+        _ensureCaps(labels, () => {
+            hintIndex = at; hintBuf = ""; hinting = true
+            _renderHints()
+        })
     }
     function cancelHints() { hinting = false; hintBuf = ""; hintIndex = -1 }
     function hintKey(ch) {
