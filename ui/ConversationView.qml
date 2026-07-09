@@ -135,8 +135,11 @@ Rectangle {
     // and image in the FOCUSED message's rich text; typing a label opens it.
     property bool hinting: false
     property string hintBuf: ""
-    property var hintTargets: []
-    property var hintLabels: []
+    property var hintTargets: []      // body urls, indexed after the chips
+    property var hintLabels: []       // one namespace: chips first, then body
+    property var hintAtts: []
+    property int hintAttCount: 0
+    property string hintMsgId: ""
     property string hintedHtml: ""
     property int hintIndex: -1
 
@@ -155,29 +158,32 @@ Rectangle {
         return '\u200B<span style="color:transparent;">&#8201;' + label + '&#8201;&nbsp;</span>'
     }
     function _renderHints() {
-        let k = 0
+        let k = hintAttCount
         _hintRe.lastIndex = 0
         hintedHtml = hintBaseHtml.replace(_hintRe, tag => _reserved(hintLabels[k++]) + tag)
     }
     function startHints() {
         const m = Backend.messages[list.currentIndex]
         if (!m) return
+        const atts = m.attachments || []
         const html = m.bodyRich || ""
-        const targets = []
+        const urls = []
         let match
         _hintRe.lastIndex = 0
-        while ((match = _hintRe.exec(html)) !== null) targets.push(match[1] || match[2])
-        if (targets.length === 0) { Backend.toast("no links in message"); return }
+        while ((match = _hintRe.exec(html)) !== null) urls.push(match[1] || match[2])
+        const total = atts.length + urls.length
+        if (total === 0) { Backend.toast("no links in message"); return }
         const A = "asdfghjkl"
         let labels
-        if (targets.length <= A.length) labels = A.slice(0, targets.length).split("")
+        if (total <= A.length) labels = A.slice(0, total).split("")
         else {
             labels = []
-            for (let i = 0; i < A.length && labels.length < targets.length; i++)
-                for (let j = 0; j < A.length && labels.length < targets.length; j++)
+            for (let i = 0; i < A.length && labels.length < total; i++)
+                for (let j = 0; j < A.length && labels.length < total; j++)
                     labels.push(A[i] + A[j])
         }
-        hintTargets = targets; hintLabels = labels
+        hintAtts = atts; hintAttCount = atts.length; hintMsgId = m.id
+        hintTargets = urls; hintLabels = labels
         hintBaseHtml = html.replace(/\u200B/g, "")
         hintRects = []
         hintIndex = list.currentIndex; hintBuf = ""
@@ -189,7 +195,13 @@ Rectangle {
         const buf = hintBuf + ch
         const exact = hintLabels.indexOf(buf)
         if (exact >= 0) {
-            const url = hintTargets[exact]
+            if (exact < hintAttCount) {
+                const a = hintAtts[exact]
+                cancelHints()
+                Backend.openAttachment(hintMsgId, a)
+                return
+            }
+            const url = hintTargets[exact - hintAttCount]
             cancelHints()
             Qt.openUrlExternally(url)
             return
@@ -342,17 +354,47 @@ Rectangle {
                         Rectangle {
                             id: attChip
                             required property var modelData
+                            required property int index
                             readonly property string msgId: parent.parent.parent.modelData.id
-                            width: chipText.implicitWidth + 20; height: 22
+                            readonly property int msgIndex: parent.parent.parent.index
+                            readonly property bool hinted: cv.hinting && msgIndex === cv.hintIndex
+                                                           && index < cv.hintAttCount
+                            readonly property string hintLabel: hinted ? cv.hintLabels[index] : ""
+                            readonly property bool hintDim: hinted && cv.hintBuf !== ""
+                                                            && hintLabel.indexOf(cv.hintBuf) !== 0
+                            width: chipInner.implicitWidth + 20; height: 22
                             radius: 11
                             color: chipHov.hovered ? Theme.surface3 : Theme.surface2
-                            Text {
-                                id: chipText
-                                renderType: Text.NativeRendering
+                            Row {
+                                id: chipInner
                                 anchors.centerIn: parent
-                                text: "󰁦 " + (modelData.name || "attachment")
-                                color: Theme.fg_secondary
-                                font.family: Theme.fontFamily; font.pixelSize: 11
+                                spacing: 6
+                                Rectangle {
+                                    visible: attChip.hinted
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: Math.max(capT.implicitWidth + 10, 16); height: 16
+                                    radius: 5
+                                    border.width: attChip.hintDim ? 0 : 1
+                                    border.color: Theme.hairline
+                                    color: attChip.hintDim ? "transparent"
+                                         : (Theme.mode === "light" ? Theme.bg : Theme.surface3)
+                                    Text {
+                                        id: capT
+                                        renderType: Text.NativeRendering
+                                        anchors.centerIn: parent
+                                        text: attChip.hintLabel
+                                        color: attChip.hintDim ? Theme.fg_muted : Theme.fg
+                                        font.family: Theme.fontFamily; font.pixelSize: 11; font.weight: 500
+                                    }
+                                }
+                                Text {
+                                    id: chipText
+                                    renderType: Text.NativeRendering
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: "󰁦 " + (attChip.modelData.name || "attachment")
+                                    color: Theme.fg_secondary
+                                    font.family: Theme.fontFamily; font.pixelSize: 11
+                                }
                             }
                             HoverHandler { id: chipHov; cursorShape: Qt.PointingHandCursor }
                             TapHandler { onTapped: Backend.openAttachment(attChip.msgId, attChip.modelData) }
@@ -394,7 +436,7 @@ Rectangle {
                             const p = doc.indexOf("\u200B", from)
                             if (p < 0) break
                             from = p + 1
-                            const lab = cv.hintLabels[k]
+                            const lab = cv.hintLabels[cv.hintAttCount + k]
                             const r1 = geom.positionToRectangle(p + 1)
                             const r2 = geom.positionToRectangle(p + 1 + lab.length + 2)
                             rects.push({ x: r1.x, y: r1.y, w: Math.max(r2.x - r1.x, 16), h: r1.height, label: lab })
