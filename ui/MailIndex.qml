@@ -46,7 +46,7 @@ Rectangle {
             font.pixelSize: 14; font.weight: 600
         }
         Rectangle {
-            anchors.right: parent.right; anchors.rightMargin: 12
+            anchors.horizontalCenter: parent.horizontalCenter
             anchors.verticalCenter: parent.verticalCenter
             width: 230; height: 30; radius: 15
             color: Theme.surface
@@ -58,7 +58,8 @@ Rectangle {
                 verticalAlignment: TextInput.AlignVCenter
                 topPadding: 0; bottomPadding: 0
                 color: Theme.fg; background: null
-                placeholderText: "search…  (/)"
+                rightPadding: 30
+                placeholderText: "search…"
                 placeholderTextColor: Theme.fg_muted
                 font.family: Theme.fontFamily; font.pixelSize: 12
                 Keys.onPressed: e => {
@@ -67,6 +68,22 @@ Rectangle {
                         if (text.trim() !== "") Backend.runSearch(text.trim())
                         idx.searchDone(); e.accepted = true
                     }
+                }
+            }
+            // the family keycap for the / bind, right-aligned in the pill
+            Rectangle {
+                visible: !sInput.activeFocus
+                anchors.right: parent.right; anchors.rightMargin: 5
+                anchors.verticalCenter: parent.verticalCenter
+                width: 20; height: 20; radius: 6
+                color: Theme.mode === "light" ? Theme.bg : Theme.surface2
+                border.width: 1; border.color: Theme.hairline
+                Text {
+                    renderType: Text.NativeRendering
+                    anchors.centerIn: parent
+                    text: "/"
+                    color: Theme.fg
+                    font.family: Theme.fontFamily; font.pixelSize: 11; font.weight: 500
                 }
             }
         }
