@@ -204,11 +204,11 @@ FloatingWindow {
             spacing: 6
             StatusCap { text: "j" }
             StatusCap { text: "k" }
-            CapLabel { text: "read" }
+            CapLabel { text: "scroll" }
             CapGap {}
             StatusCap { text: "n" }
             StatusCap { text: "p" }
-            CapLabel { text: "msg" }
+            CapLabel { text: "message" }
             CapGap {}
             StatusCap { text: "f" }
             CapLabel { text: "links" }
@@ -217,7 +217,7 @@ FloatingWindow {
             CapLabel { text: "reply" }
             CapGap {}
             StatusCap { text: "i" }
-            CapLabel { text: "write" }
+            CapLabel { text: "insert" }
             CapGap {}
             StatusCap { text: "h" }
             CapLabel { text: "back" }
