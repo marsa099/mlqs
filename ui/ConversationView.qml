@@ -78,22 +78,44 @@ Rectangle {
         if (ccs.length) s += (s ? "   ·   " : "") + "cc " + ccs.join(", ")
         return s
     }
+    // the literal recipient set a send would use — the footer displays this,
+    // so "what does all mean here" is never a question
+    function computeRecipients(all) {
+        const t = targetMsg()
+        if (!t) return { to: [], cc: [] }
+        let to = []
+        if (t.from && t.from.email && t.from.email.toLowerCase() !== cv.myEmail) to = [t.from.email]
+        else to = (t.to || []).map(a => a.email).filter(e => e && e.toLowerCase() !== cv.myEmail)
+        let cc = []
+        if (all) {
+            const rest = (t.to || []).concat(t.cc || []).map(a => a.email)
+            cc = [...new Set(rest.filter(e => e && e.toLowerCase() !== cv.myEmail && to.indexOf(e) < 0))]
+        }
+        return { to: to, cc: cc }
+    }
+    function _nameOf(email) {
+        const t = targetMsg()
+        const pool = t ? [t.from].concat(t.to || [], t.cc || []) : []
+        const hit = pool.find(a => a && a.email === email)
+        return hit && hit.name ? hit.name : email
+    }
+    function replySummary() {
+        const r = computeRecipients(replyAll)
+        if (r.to.length === 0) return ""
+        let s = "to " + r.to.map(_nameOf).join(", ")
+        if (r.cc.length) s += " · cc " + r.cc.map(_nameOf).join(", ")
+        return s
+    }
     function sendReply() {
         const text = replyInput.text.trim()
         if (text === "") return
         const t = targetMsg()
         if (!t) return
-        let to = []
-        if (t.from && t.from.email && t.from.email.toLowerCase() !== cv.myEmail) to = [t.from.email]
-        else to = (t.to || []).map(a => a.email).filter(e => e && e.toLowerCase() !== cv.myEmail)
-        let cc = []
-        if (cv.replyAll) {
-            const all = (t.to || []).concat(t.cc || []).map(a => a.email)
-            cc = [...new Set(all.filter(e => e && e.toLowerCase() !== cv.myEmail && to.indexOf(e) < 0))]
-        }
+        const r = computeRecipients(cv.replyAll)
+        if (r.to.length === 0) { Backend.toast("no recipient"); return }
         let subj = t.subject || Backend.openConvSubject
         if (!/^re:/i.test(subj)) subj = "Re: " + subj
-        Backend.sendMail({ to: to.join(", "), cc: cc.join(", "), subject: subj,
+        Backend.sendMail({ to: r.to.join(", "), cc: r.cc.join(", "), subject: subj,
                            body: text, replyTo: t.id, conv: Backend.openConvId })
         replyInput.clear()
         cv.exitInsert()
@@ -412,17 +434,22 @@ Rectangle {
         color: Theme.bg
 
         Row {
-            anchors { left: parent.left; leftMargin: 24; top: parent.top }
+            anchors { left: parent.left; leftMargin: 24; right: parent.right; rightMargin: 14; top: parent.top }
             height: 26; spacing: 8
+            // the toggle only exists when reply-all actually adds anyone
+            readonly property bool hasAudience: cv.computeRecipients(true).cc.length > 0
             Text {
                 renderType: Text.NativeRendering
                 anchors.verticalCenter: parent.verticalCenter
-                text: "↰ replying to " + cv.replyTargetName()
+                text: "↰ " + cv.replySummary()
                 color: Theme.fg_muted
                 font.family: Theme.fontFamily; font.hintingPreference: Font.PreferNoHinting
                 font.pixelSize: 12
+                elide: Text.ElideRight
+                width: Math.min(implicitWidth, parent.width - 220)
             }
             Rectangle {
+                visible: parent.hasAudience
                 anchors.verticalCenter: parent.verticalCenter
                 height: 18; radius: 9; width: allLbl.implicitWidth + 16
                 color: cv.replyAll ? Theme.cursor : "transparent"
@@ -432,7 +459,7 @@ Rectangle {
                     id: allLbl
                     renderType: Text.NativeRendering
                     anchors.centerIn: parent
-                    text: cv.replyAll ? "to all" : "sender only"
+                    text: cv.replyAll ? "all" : "sender only"
                     color: cv.replyAll ? Theme.ink : Theme.fg_muted
                     font.family: Theme.fontFamily; font.pixelSize: 11; font.weight: 500
                 }
@@ -441,7 +468,8 @@ Rectangle {
             Text {
                 renderType: Text.NativeRendering
                 anchors.verticalCenter: parent.verticalCenter
-                text: "a toggle · R pick message · i write"
+                text: (parent.hasAudience ? "a toggle · " : "")
+                      + (Backend.messages.length > 1 ? "R pick message · " : "") + "i write"
                 color: Theme.fg_muted; opacity: 0.7
                 font.family: Theme.fontFamily; font.pixelSize: 11
             }
