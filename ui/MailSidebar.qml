@@ -124,7 +124,8 @@ Rectangle {
                 MultiEffect {
                     anchors.fill: thImg; source: thImg
                     colorization: 1
-                    colorizationColor: threadsRow.primary ? Theme.bg : Theme.fg_muted
+                    colorizationColor: threadsRow.primary ? Theme.bg
+                         : (threadsRow.isOpen || bar.sel === -1) ? Theme.fg : Theme.fg_muted
                 }
             }
             Text {
@@ -252,7 +253,8 @@ Rectangle {
                     MultiEffect {
                         anchors.fill: gImg; source: gImg
                         colorization: 1
-                        colorizationColor: row.primary ? Theme.bg : Theme.fg_muted
+                        colorizationColor: row.primary ? Theme.bg
+                             : (modelData.unread > 0 || row.isOpen || row.cursor) ? Theme.fg : Theme.fg_muted
                     }
                 }
                 Text {
