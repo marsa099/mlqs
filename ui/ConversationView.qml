@@ -161,22 +161,16 @@ Rectangle {
             height: content.height + 24
             color: "transparent"
 
-            // every message is a card; focus shows as the gutter cursor bar,
-            // not as a lone card that reads like an inconsistency
+            // picker highlighting system: the focused message gets the
+            // selection fill + hairline, everything else stays transparent
+            readonly property bool multi: Backend.messages.length > 1
             Rectangle {
                 anchors.fill: parent
                 anchors.leftMargin: 10; anchors.rightMargin: 10
                 radius: Theme.radius
-                color: Theme.surface1
-                border.color: Theme.hairline
+                color: parent.multi && index === list.currentIndex ? Theme.selection : "transparent"
                 border.width: 1
-            }
-            Rectangle {
-                visible: index === list.currentIndex && Backend.messages.length > 1
-                anchors.left: parent.left; anchors.leftMargin: 10
-                anchors.top: parent.top; anchors.topMargin: 14
-                width: 3; height: 24; radius: 2
-                color: Theme.cursor
+                border.color: parent.multi && index === list.currentIndex ? Theme.hairline : "transparent"
             }
 
             Column {
