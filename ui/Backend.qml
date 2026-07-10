@@ -131,44 +131,85 @@ Singleton {
         if (i >= 0) convsModel.setProperty(i, "starred", v)
     }
 
-    // one-level undo for destructive moves (u) — Gmail restores server-side
+    // one-level undo for destructive moves (u) — Gmail restores server-side.
+    // Holds a LIST so visual-mode batches undo as one unit.
     property var lastRemoved: null
 
-    function _rememberRemoved(kind, id) {
-        const i = findRow(id)
-        if (i < 0) { lastRemoved = null; return }
+    function _snapRow(i) {
         const r = convsModel.get(i)
-        lastRemoved = { kind: kind, idx: i, account: currentAccount, folderId: currentFolderId,
-                        row: { tid: r.tid, subject: r.subject, snippet: r.snippet, who: r.who,
-                               dateStr: r.dateStr, dateMs: r.dateMs, unread: r.unread, starred: r.starred } }
+        return { idx: i, row: { tid: r.tid, subject: r.subject, snippet: r.snippet, who: r.who,
+                                dateStr: r.dateStr, dateMs: r.dateMs, unread: r.unread, starred: r.starred } }
+    }
+
+    function _removeMany(kind, ids) {
+        const items = []
+        for (const id of ids) {
+            const i = findRow(id)
+            if (i >= 0) items.push(_snapRow(i))
+        }
+        if (items.length === 0) return 0
+        lastRemoved = { kind: kind, account: currentAccount, folderId: currentFolderId, items: items }
+        for (const it of items) {
+            send({ type: kind, account: currentAccount, id: it.row.tid })
+            removeLocal(it.row.tid)
+        }
+        return items.length
     }
 
     function archiveConv(id) {
-        _rememberRemoved("archive", id)
-        send({ type: "archive", account: currentAccount, id: id })
-        removeLocal(id)
-        if (lastRemoved) toast("archived — u undoes")
+        if (_removeMany("archive", [id])) toast("archived — u undoes")
     }
-
     function trashConv(id) {
-        _rememberRemoved("trash", id)
-        send({ type: "trash", account: currentAccount, id: id })
-        removeLocal(id)
-        if (lastRemoved) toast("trashed — u undoes")
+        if (_removeMany("trash", [id])) toast("trashed — u undoes")
+    }
+    function batchArchive(ids) {
+        const n = _removeMany("archive", ids)
+        if (n) toast(n + " archived — u undoes")
+    }
+    function batchTrash(ids) {
+        const n = _removeMany("trash", ids)
+        if (n) toast(n + " trashed — u undoes")
+    }
+    // rows: model rows; if any unread → all read, else all unread
+    function batchRead(rows) {
+        if (!rows.length) return
+        const read = rows.some(r => r.unread)
+        for (const r of rows) {
+            if (!!r.unread !== read) continue
+            send({ type: "markread", account: currentAccount, id: r.tid, text: read ? "true" : "false" })
+            setLocalRead(r.tid, read)
+        }
+        toast(read ? "marked read" : "marked unread")
+    }
+    function batchStar(rows) {
+        if (!rows.length) return
+        const star = rows.some(r => !r.starred)
+        for (const r of rows) {
+            if (!!r.starred === star) continue
+            send({ type: "star", account: currentAccount, id: r.tid, text: star ? "true" : "false" })
+            const i = findRow(r.tid)
+            if (i >= 0) convsModel.setProperty(i, "starred", star)
+        }
+        toast(star ? "starred" : "unstarred")
     }
 
     function undoRemove() {
         const lr = lastRemoved
         if (!lr) { toast("nothing to undo"); return }
         lastRemoved = null
-        send({ type: lr.kind === "trash" ? "untrash" : "unarchive", account: lr.account, id: lr.row.tid })
-        if (lr.account === currentAccount && lr.folderId === currentFolderId) {
-            convsModel.insert(Math.min(lr.idx, convsModel.count), lr.row)
-            if (lr.row.unread)
-                folders = folders.map(f => f.id === currentFolderId
-                    ? Object.assign({}, f, { unread: (f.unread || 0) + 1 }) : f)
+        const verb = lr.kind === "trash" ? "untrash" : "unarchive"
+        // reinsert in ascending original order so indices land right
+        const items = lr.items.slice().sort((a, b) => a.idx - b.idx)
+        for (const it of items) {
+            send({ type: verb, account: lr.account, id: it.row.tid })
+            if (lr.account === currentAccount && lr.folderId === currentFolderId) {
+                convsModel.insert(Math.min(it.idx, convsModel.count), it.row)
+                if (it.row.unread)
+                    folders = folders.map(f => f.id === currentFolderId
+                        ? Object.assign({}, f, { unread: (f.unread || 0) + 1 }) : f)
+            }
         }
-        toast(lr.kind === "trash" ? "restored from trash" : "restored to inbox")
+        toast((items.length > 1 ? items.length + " " : "") + (lr.kind === "trash" ? "restored from trash" : "restored to inbox"))
     }
 
     function removeLocal(id) {

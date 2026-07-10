@@ -96,10 +96,10 @@ FloatingWindow {
             Rectangle {
                 width: modeLabel.implicitWidth + 16; height: 22; radius: 7
                 anchors.verticalCenter: parent.verticalCenter
-                color: win.insertMode ? Theme.cursor : Theme.green
+                color: win.insertMode ? Theme.cursor : index.visualMode ? Theme.sky : Theme.green
                 Text { renderType: Text.NativeRendering
                     id: modeLabel; anchors.centerIn: parent
-                    text: win.insertMode ? "INSERT" : "NORMAL"
+                    text: win.insertMode ? "INSERT" : index.visualMode ? "VISUAL" : "NORMAL"
                     color: (parent.color.r * 0.299 + parent.color.g * 0.587 + parent.color.b * 0.114) > 0.5 ? Theme.ink : Theme.brightWhite
                     font.family: Theme.fontFamily; font.hintingPreference: Font.PreferNoHinting
                     font.pixelSize: 11; font.weight: 500; font.letterSpacing: 0.5
@@ -117,7 +117,31 @@ FloatingWindow {
         }
 
         Row {
-            visible: !statusbar.inConv
+            visible: !statusbar.inConv && index.visualMode
+            anchors.right: parent.right; anchors.rightMargin: 14
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 6
+            KeyCap { anchors.verticalCenter: parent.verticalCenter; text: "j" }
+            KeyCap { anchors.verticalCenter: parent.verticalCenter; text: "k" }
+            CapLabel { anchors.verticalCenter: parent.verticalCenter; text: "extend" }
+            CapGap {}
+            KeyCap { anchors.verticalCenter: parent.verticalCenter; text: "e" }
+            CapLabel { anchors.verticalCenter: parent.verticalCenter; text: "archive" }
+            CapGap {}
+            KeyCap { anchors.verticalCenter: parent.verticalCenter; text: "d" }
+            CapLabel { anchors.verticalCenter: parent.verticalCenter; text: "trash" }
+            CapGap {}
+            KeyCap { anchors.verticalCenter: parent.verticalCenter; text: "r" }
+            CapLabel { anchors.verticalCenter: parent.verticalCenter; text: "read" }
+            CapGap {}
+            KeyCap { anchors.verticalCenter: parent.verticalCenter; text: "x" }
+            CapLabel { anchors.verticalCenter: parent.verticalCenter; text: "star" }
+            CapGap {}
+            KeyCap { anchors.verticalCenter: parent.verticalCenter; text: "esc" }
+            CapLabel { anchors.verticalCenter: parent.verticalCenter; text: "cancel" }
+        }
+        Row {
+            visible: !statusbar.inConv && !index.visualMode
             anchors.right: parent.right; anchors.rightMargin: 14
             anchors.verticalCenter: parent.verticalCenter
             spacing: 6
@@ -140,6 +164,9 @@ FloatingWindow {
             CapGap {}
             KeyCap { anchors.verticalCenter: parent.verticalCenter; text: "n" }
             CapLabel { anchors.verticalCenter: parent.verticalCenter; text: "compose" }
+            CapGap {}
+            KeyCap { anchors.verticalCenter: parent.verticalCenter; text: "v" }
+            CapLabel { anchors.verticalCenter: parent.verticalCenter; text: "select" }
             CapGap {}
             KeyCap { anchors.verticalCenter: parent.verticalCenter; text: "u" }
             CapLabel { anchors.verticalCenter: parent.verticalCenter; text: "undo" }
@@ -201,6 +228,33 @@ FloatingWindow {
                 Backend.cycleAccount(e.key === Qt.Key_L ? 1 : -1)
                 e.accepted = true; return
             }
+            // visual mode owns the keyboard in the index
+            if (!inConv && index.visualMode) {
+                switch (e.key) {
+                case Qt.Key_J: index.move(win.consumeCount()); break
+                case Qt.Key_K: index.move(-win.consumeCount()); break
+                case Qt.Key_G:
+                    if (e.modifiers & Qt.ShiftModifier) index.toEnd()
+                    else if (win.gPending) { win.gPending = false; index.toTop() }
+                    else win.arm("g")
+                    break
+                case Qt.Key_E: Backend.batchArchive(index.selIds()); index.visualEnd(); break
+                case Qt.Key_D: Backend.batchTrash(index.selIds()); index.visualEnd(); break
+                case Qt.Key_R: Backend.batchRead(index.selRows()); index.visualEnd(); break
+                case Qt.Key_X: Backend.batchStar(index.selRows()); index.visualEnd(); break
+                case Qt.Key_Escape:
+                case Qt.Key_V:
+                case Qt.Key_Q: index.visualEnd(); break
+                default:
+                    if (e.key >= Qt.Key_0 && e.key <= Qt.Key_9) {
+                        const digit = e.key - Qt.Key_0
+                        if (digit !== 0 || win.pendingCount > 0) win.pendingCount = win.pendingCount * 10 + digit
+                    }
+                    e.accepted = true; return
+                }
+                e.accepted = true; return
+            }
+
             // pane focus
             if (ctrl && e.key === Qt.Key_H) { win.pane = "sidebar"; e.accepted = true; return }
             if (ctrl && e.key === Qt.Key_L) { win.pane = "index"; e.accepted = true; return }
@@ -292,6 +346,9 @@ FloatingWindow {
                 break
             case Qt.Key_Q:
                 if (inConv) Backend.closeConv()
+                break
+            case Qt.Key_V:
+                if (!inConv && win.pane === "index") index.visualStart()
                 break
             case Qt.Key_U:
                 if (!inConv) Backend.undoRemove()

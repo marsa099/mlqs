@@ -11,6 +11,29 @@ Rectangle {
     color: Theme.bg
     property bool active: true
 
+    // visual mode: v anchors, j/k extend the range, actions apply to it
+    property bool visualMode: false
+    property int visualAnchor: 0
+    function visualStart() {
+        if (list.count === 0) return
+        visualAnchor = list.currentIndex
+        visualMode = true
+    }
+    function visualEnd() { visualMode = false }
+    function inSel(i) {
+        return visualMode && i >= Math.min(visualAnchor, list.currentIndex)
+                          && i <= Math.max(visualAnchor, list.currentIndex)
+    }
+    function selRows() {
+        if (!visualMode) { const c = current(); return c ? [c] : [] }
+        const lo = Math.min(visualAnchor, list.currentIndex)
+        const hi = Math.max(visualAnchor, list.currentIndex)
+        const out = []
+        for (let i = lo; i <= hi; i++) out.push(Backend.convs.get(i))
+        return out
+    }
+    function selIds() { return selRows().map(r => r.tid) }
+
     function move(d) {
         if (list.count === 0) return
         list.currentIndex = Math.max(0, Math.min(list.count - 1, list.currentIndex + d))
@@ -26,7 +49,7 @@ Rectangle {
     function open() { Backend.openConv(current()) }
     Connections {
         target: Backend
-        function onCurrentFolderIdChanged() { list.currentIndex = 0 }
+        function onCurrentFolderIdChanged() { list.currentIndex = 0; idx.visualEnd() }
     }
 
     // header: folder name + count
@@ -115,7 +138,7 @@ Rectangle {
             }
         }
 
-        delegate: Rectangle {
+        delegate: Item {
             id: row
             required property int index
             required property string tid
@@ -125,11 +148,30 @@ Rectangle {
             required property string dateStr
             required property bool unread
             required property bool starred
-            width: list.width; height: 38
+            width: list.width; height: 40
             readonly property bool cursor: index === list.currentIndex
-            color: cursor && idx.active ? Theme.surface2 : "transparent"
+            readonly property bool sel: idx.inSel(index)
+            // ink text on the inverted selection pill
+            readonly property color rowFg: sel ? Theme.bg : Theme.fg
+            readonly property color rowFgDim: sel ? Qt.rgba(Theme.bg.r, Theme.bg.g, Theme.bg.b, 0.7) : Theme.fg_muted
 
-            // vim hybrid gutter: distance-from-cursor, orange bar on cursor row
+            // reference-style pill rows in our tokens: unread pops as a raised
+            // card, read sits as a faint tint, visual selection inverts to ink
+            Rectangle {
+                anchors.fill: parent
+                anchors.leftMargin: idx.active ? 28 : 8
+                anchors.rightMargin: 8
+                anchors.topMargin: 2; anchors.bottomMargin: 2
+                radius: height / 2
+                color: row.sel ? Theme.fg
+                     : row.cursor && idx.active ? Theme.selection
+                     : row.unread ? (Theme.mode === "light" ? Theme.bg : Theme.surface2)
+                     : Qt.rgba(Theme.fg.r, Theme.fg.g, Theme.fg.b, 0.03)
+                border.width: 1
+                border.color: (row.cursor && idx.active) || row.unread ? Theme.hairline : "transparent"
+            }
+
+            // gutter: rel numbers normally; check circles in visual mode
             Item {
                 id: gutter
                 width: 22; height: parent.height
@@ -137,7 +179,7 @@ Rectangle {
                 visible: idx.active
                 Text {
                     renderType: Text.NativeRendering
-                    visible: !cursor
+                    visible: !idx.visualMode && !cursor
                     anchors.right: parent.right; anchors.rightMargin: 2
                     anchors.verticalCenter: parent.verticalCenter
                     text: Math.abs(index - list.currentIndex)
@@ -146,41 +188,56 @@ Rectangle {
                     font.features: ({ "tnum": 1 })
                 }
                 Rectangle {
-                    visible: cursor
+                    visible: !idx.visualMode && cursor
                     anchors.right: parent.right; anchors.rightMargin: 6
                     anchors.verticalCenter: parent.verticalCenter
                     width: 3; height: 16; radius: 2; color: Theme.cursor
+                }
+                Rectangle {
+                    visible: idx.visualMode
+                    anchors.right: parent.right; anchors.rightMargin: 2
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 16; height: 16; radius: 5
+                    color: row.sel ? Theme.cursor : "transparent"
+                    border.width: 1
+                    border.color: row.sel ? Theme.cursor : Theme.hairline
+                    Icon {
+                        visible: row.sel
+                        anchors.centerIn: parent
+                        width: 10; height: 10
+                        name: "check"
+                        color: Theme.ink
+                    }
                 }
             }
 
             // unread dot
             Rectangle {
-                anchors.left: parent.left; anchors.leftMargin: idx.active ? 32 : 12
+                anchors.left: parent.left; anchors.leftMargin: idx.active ? 38 : 18
                 anchors.verticalCenter: parent.verticalCenter
                 width: 7; height: 7; radius: 4
                 color: Theme.cursor
-                visible: row.unread
+                visible: row.unread && !row.sel
             }
 
-            Text {
+            Icon {
                 id: star
-                renderType: Text.NativeRendering
-                anchors.left: parent.left; anchors.leftMargin: idx.active ? 46 : 26
+                anchors.left: parent.left; anchors.leftMargin: idx.active ? 50 : 30
                 anchors.verticalCenter: parent.verticalCenter
-                text: row.starred ? "" : ""
-                color: Theme.yellow
-                font.family: Theme.fontFamily; font.pixelSize: 12
-                width: 16
+                width: 13; height: 13
+                name: "flag-7"
+                fill: row.starred ? "glyph" : "outline"
+                color: row.sel ? Theme.bg : row.starred ? Theme.cursor : Theme.fg_muted
             }
 
             Text {
                 id: whoText
                 renderType: Text.NativeRendering
-                anchors.left: star.right; anchors.leftMargin: 4
+                anchors.left: star.right; anchors.leftMargin: 8
                 anchors.verticalCenter: parent.verticalCenter
                 width: 210
                 text: row.who
-                color: row.unread ? Theme.fg : Theme.fg_secondary
+                color: row.sel ? Theme.bg : row.unread ? Theme.fg : Theme.fg_secondary
                 font.family: Theme.fontFamily
                 font.hintingPreference: Font.PreferNoHinting
                 font.pixelSize: 13
@@ -201,7 +258,7 @@ Rectangle {
                         .replace(/&/g, "&amp;").replace(/</g, "&lt;")
                     return subj + (snip ? "  <font color='" + Theme.fg_muted + "'>— " + snip + "</font>" : "")
                 }
-                color: row.unread ? Theme.fg : Theme.fg_secondary
+                color: row.sel ? Theme.bg : row.unread ? Theme.fg : Theme.fg_secondary
                 font.family: Theme.fontFamily
                 font.hintingPreference: Font.PreferNoHinting
                 font.pixelSize: 13
@@ -212,10 +269,10 @@ Rectangle {
             Text {
                 id: when
                 renderType: Text.NativeRendering
-                anchors.right: parent.right; anchors.rightMargin: 14
+                anchors.right: parent.right; anchors.rightMargin: 22
                 anchors.verticalCenter: parent.verticalCenter
                 text: row.dateStr
-                color: row.unread ? Theme.fg : Theme.fg_muted
+                color: row.sel ? Qt.rgba(Theme.bg.r, Theme.bg.g, Theme.bg.b, 0.75) : row.unread ? Theme.fg : Theme.fg_muted
                 font.family: Theme.fontFamily; font.pixelSize: 12
                 font.features: ({ "tnum": 1 })
             }
