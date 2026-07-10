@@ -351,8 +351,12 @@ Singleton {
             // daemon re-sends workspaces on connect; refresh the open view too
             if (currentAccount !== "") {
                 send({ type: "folders", account: currentAccount })
-                if (currentFolderId !== "")
+                if (currentFolderId !== "" && currentFolderId !== "__threads")
                     send({ type: "conversations", account: currentAccount, folder: currentFolderId })
+                // an open conversation's fetch died with the old daemon —
+                // re-request it or it shows "loading…" forever
+                if (openConvId !== "")
+                    send({ type: "conversation", account: currentAccount, id: openConvId })
             }
         }
     }
