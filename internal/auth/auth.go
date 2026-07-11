@@ -22,8 +22,8 @@ import (
 	"mlqs/internal/httpx"
 )
 
-// Placeholder until the Graph adapter phase: register the multitenant Azure
-// app and embed its client ID here (public client, no secret — PKCE only).
+// Optional embedded public client (PKCE, no secret). Empty means BYO:
+// each outlook account carries its own client_id — see README.
 const defaultMSClientID = ""
 
 func oauthConfig(a config.Account, redirect string) (*oauth2.Config, error) {
@@ -59,6 +59,7 @@ func oauthConfig(a config.Account, redirect string) (*oauth2.Config, error) {
 				"offline_access",
 				"https://graph.microsoft.com/Mail.ReadWrite",
 				"https://graph.microsoft.com/Mail.Send",
+				"https://graph.microsoft.com/Calendars.ReadWrite",
 				"https://graph.microsoft.com/User.Read",
 			},
 		}, nil

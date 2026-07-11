@@ -32,6 +32,47 @@ nobody pays Google's verification fees:
 At consent time you'll see "Google hasn't verified this app" →
 Advanced → continue. That's the deal with the BYO model.
 
+## Outlook / Microsoft 365
+
+Outlook accounts work through Microsoft Graph — mail and calendar,
+including Teams meetings (the agenda's join key and the reminder's Join
+button open Teams in the browser).
+
+Bring your own Azure app registration (free, ~10 minutes, no admin
+consent needed for your own mailbox):
+
+1. Go to [portal.azure.com](https://portal.azure.com) → **Microsoft Entra
+   ID → App registrations → New registration**.
+2. Name it (e.g. `mlqs`). Under **Supported account types** pick
+   *"Accounts in any organizational directory and personal Microsoft
+   accounts"* — that covers both work M365 and personal outlook.com.
+3. Under **Redirect URI** choose platform **"Mobile and desktop
+   applications"** and enter `http://localhost`.
+4. After creating, open **Authentication** and set **"Allow public client
+   flows"** to **Yes**. No client secret — mlqs uses PKCE.
+5. Copy the **Application (client) ID** into your account entry:
+
+```json
+{
+  "name": "work",
+  "vendor": "outlook",
+  "email": "you@company.com",
+  "client_id": "<application-client-id>"
+}
+```
+
+Then authorize as usual: `mlqs auth work`. Scopes requested:
+`Mail.ReadWrite`, `Mail.Send`, `Calendars.ReadWrite`, `User.Read`,
+`offline_access`.
+
+Notes:
+
+- Some organizations gate third-party apps; if consent fails with an
+  admin-approval screen, your IT needs to allow the app (or you register
+  it inside the org tenant instead of multitenant).
+- Replies thread through Graph's native reply flow, so recipients in
+  Outlook see the usual quoted history.
+
 ## Calendar
 
 The daemon also speaks Google Calendar: a merged agenda across accounts

@@ -17,6 +17,7 @@ import (
 	"golang.org/x/oauth2"
 
 	"mlqs/internal/httpx"
+	"mlqs/internal/provider"
 )
 
 const apiBase = "https://www.googleapis.com/calendar/v3"
@@ -79,37 +80,13 @@ func (c *Client) do(ctx context.Context, method, path string, q url.Values, body
 	return nil
 }
 
-type Calendar struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Primary bool   `json:"primary"`
-	Color   string `json:"color"`
-	Role    string `json:"role"` // owner|writer|reader|freeBusyReader
-}
-
-type Attendee struct {
-	Email  string `json:"email"`
-	Name   string `json:"name"`
-	Status string `json:"status"`
-	Self   bool   `json:"self"`
-}
-
-// Event is the flat IPC shape the UI consumes directly.
-type Event struct {
-	ID        string     `json:"id"`
-	CalID     string     `json:"calId"`
-	Title     string     `json:"title"`
-	Location  string     `json:"location"`
-	Start     time.Time  `json:"start"`
-	End       time.Time  `json:"end"`
-	AllDay    bool       `json:"allDay"`
-	MeetLink  string     `json:"meetLink"`
-	HTMLLink  string     `json:"htmlLink"`
-	MyStatus  string     `json:"myStatus"` // accepted|declined|tentative|needsAction|"" (no attendee entry)
-	Organizer string     `json:"organizer"`
-	Attendees []Attendee `json:"attendees"`
-	ICalUID   string     `json:"iCalUid"`
-}
+// Aliases into the vendor-blind types — Graph implements the same shapes.
+type (
+	Calendar = provider.Calendar
+	Attendee = provider.CalAttendee
+	Event    = provider.CalEvent
+	NewEvent = provider.NewEvent
+)
 
 type apiTime struct {
 	Date     string `json:"date,omitempty"`
@@ -292,16 +269,6 @@ func (c *Client) FindByICalUID(ctx context.Context, calID, uid string) (*Event, 
 		}
 	}
 	return nil, fmt.Errorf("no event for invite (uid %s)", uid)
-}
-
-type NewEvent struct {
-	Title     string
-	Location  string
-	Start     time.Time
-	End       time.Time
-	Attendees []string
-	Meet      bool
-	Notes     string
 }
 
 func (c *Client) Create(ctx context.Context, calID string, ne NewEvent) (*Event, error) {

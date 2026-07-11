@@ -32,6 +32,7 @@ import (
 	"mlqs/internal/debuglog"
 	"mlqs/internal/gcal"
 	"mlqs/internal/gmail"
+	"mlqs/internal/graph"
 	"mlqs/internal/imgcache"
 	"mlqs/internal/notify"
 	"mlqs/internal/provider"
@@ -49,7 +50,7 @@ type daemon struct {
 	cfg       *config.Config
 	db        *cache.DB
 	providers map[string]provider.Provider // keyed by account name
-	cals      map[string]*gcal.Client      // keyed by account name
+	cals      map[string]provider.CalendarProvider // keyed by account name
 
 	calMu       sync.Mutex
 	calNotified map[string]bool // event occurrence keys already reminded
@@ -598,7 +599,7 @@ func (d *daemon) handle(conn net.Conn, cmd command) {
 
 // agenda merges the coming span across the account's visible calendars.
 // days==1 means "today": the window closes at local midnight, not +24h.
-func (d *daemon) agenda(ctx context.Context, cal *gcal.Client, days int) ([]gcal.Event, error) {
+func (d *daemon) agenda(ctx context.Context, cal provider.CalendarProvider, days int) ([]provider.CalEvent, error) {
 	calendars, err := cal.Calendars(ctx)
 	if err != nil {
 		return nil, err
@@ -612,7 +613,7 @@ func (d *daemon) agenda(ctx context.Context, cal *gcal.Client, days int) ([]gcal
 	}
 	var mu sync.Mutex
 	var wg sync.WaitGroup
-	var out []gcal.Event
+	var out []provider.CalEvent
 	for _, c := range calendars {
 		wg.Add(1)
 		go func(id string) {
@@ -630,7 +631,7 @@ func (d *daemon) agenda(ctx context.Context, cal *gcal.Client, days int) ([]gcal
 	wg.Wait()
 	// duplicates appear when an event lives on several visible calendars
 	seen := map[string]bool{}
-	var uniq []gcal.Event
+	var uniq []provider.CalEvent
 	for _, e := range out {
 		if seen[e.ICalUID+e.Start.String()] {
 			continue
@@ -642,7 +643,7 @@ func (d *daemon) agenda(ctx context.Context, cal *gcal.Client, days int) ([]gcal
 	return uniq, nil
 }
 
-func sortEvents(evs []gcal.Event) {
+func sortEvents(evs []provider.CalEvent) {
 	for i := 1; i < len(evs); i++ {
 		for j := i; j > 0 && evs[j].Start.Before(evs[j-1].Start); j-- {
 			evs[j], evs[j-1] = evs[j-1], evs[j]
@@ -658,7 +659,7 @@ func isICS(a provider.Attachment) bool {
 // calNotifyLoop reminds 5 minutes before events start, with a Join action
 // when the event carries a meet link. Watches every visible calendar
 // (shared ones included); declined and all-day events stay silent.
-func (d *daemon) calNotifyLoop(account string, cal *gcal.Client) {
+func (d *daemon) calNotifyLoop(account string, cal provider.CalendarProvider) {
 	var calIDs []string
 	var lastList time.Time
 	for {
@@ -676,7 +677,7 @@ func (d *daemon) calNotifyLoop(account string, cal *gcal.Client) {
 				debuglog.API("calnotify %s: list: %v", account, err)
 			}
 		}
-		var evs []gcal.Event
+		var evs []provider.CalEvent
 		for _, id := range calIDs {
 			es, err := cal.Events(ctx, id, time.Now(), time.Now().Add(30*time.Minute))
 			if err != nil {
@@ -898,7 +899,7 @@ func main() {
 		cfg:         cfg,
 		db:          db,
 		providers:   map[string]provider.Provider{},
-		cals:        map[string]*gcal.Client{},
+		cals:        map[string]provider.CalendarProvider{},
 		conns:       map[net.Conn]struct{}{},
 		notified:    map[string]string{},
 		calNotified: map[string]bool{},
@@ -918,6 +919,16 @@ func main() {
 			d.providers[a.Name] = gmail.New(ctx, ts)
 			d.cals[a.Name] = gcal.New(ctx, ts)
 			log.Printf("account %s (%s) ready", a.Name, a.Email)
+		case "outlook":
+			ts, err := auth.Source(ctx, a)
+			if err != nil {
+				log.Printf("%v", err)
+				continue
+			}
+			g := graph.New(ctx, ts)
+			d.providers[a.Name] = g
+			d.cals[a.Name] = g
+			log.Printf("account %s (%s, outlook) ready", a.Name, a.Email)
 		default:
 			log.Printf("account %s: vendor %q not implemented yet", a.Name, a.Vendor)
 		}
