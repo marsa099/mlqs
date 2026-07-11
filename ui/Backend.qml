@@ -285,7 +285,15 @@ Singleton {
         for (const acct in _agendaByAccount)
             for (const ev of _agendaByAccount[acct]) all.push(Object.assign({ account: acct }, ev))
         all.sort((a, b) => new Date(a.start) - new Date(b.start))
-        for (const ev of all) eventsModel.append(toEventRow(ev))
+        // the same event often exists on both accounts' calendars — collapse,
+        // preferring the copy that carries my RSVP status
+        const seen = {}, out = []
+        for (const ev of all) {
+            const k = (ev.iCalUid || ev.id) + "|" + ev.start
+            if (seen[k] === undefined) { seen[k] = out.length; out.push(ev) }
+            else if (!out[seen[k]].myStatus && ev.myStatus) out[seen[k]] = ev
+        }
+        for (const ev of out) eventsModel.append(toEventRow(ev))
     }
     function toEventRow(ev) {
         const s = new Date(ev.start), e = new Date(ev.end)
