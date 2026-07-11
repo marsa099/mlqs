@@ -245,6 +245,9 @@ FloatingWindow {
             KeyCap { anchors.verticalCenter: parent.verticalCenter; text: "r" }
             CapLabel { anchors.verticalCenter: parent.verticalCenter; text: "reply" }
             CapGap {}
+            KeyCap { anchors.verticalCenter: parent.verticalCenter; text: "⇧f" }
+            CapLabel { anchors.verticalCenter: parent.verticalCenter; text: "forward" }
+            CapGap {}
             KeyCap { anchors.verticalCenter: parent.verticalCenter; text: "a" }
             CapLabel { anchors.verticalCenter: parent.verticalCenter; text: "recipients" }
             CapGap {}
@@ -453,7 +456,8 @@ FloatingWindow {
                 if (!inConv) Backend.undoRemove()
                 break
             case Qt.Key_F:
-                if (inConv) conv.startHints()
+                if (inConv && (e.modifiers & Qt.ShiftModifier)) composer.forward(conv.focusedMsg())
+                else if (inConv) conv.startHints()
                 break
             case Qt.Key_N:
                 if (inConv && conv.inviteMsg()) { Backend.rsvpMail(conv.inviteMsg().id, "declined"); break }

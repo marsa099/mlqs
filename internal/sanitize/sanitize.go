@@ -104,16 +104,32 @@ func quoted(n *xhtml.Node) bool {
 // Outlook doesn't mark its quotes — it opens a border-top separator div with
 // a From:/Sent:/To: header block and pastes the whole prior thread after it.
 // Truncate at the separator; same for the plain-text variants.
+// `solid` must come right after border-top (Outlook's mso style order) and a
+// From: block must follow — design emails use border-top bars decoratively.
 var (
-	reOutlookSep = regexp.MustCompile(`(?i)<div[^>]*border-top:[^;">]*solid[^>]*>`)
+	reOutlookSep = regexp.MustCompile(`(?i)<div[^>]*border-top:\s*solid[^>]*>`)
 	reOrigMsg    = regexp.MustCompile(`(?i)-+\s*Original Message\s*-+`)
 	reOnWrote    = regexp.MustCompile(`(?i)^On .{5,120} wrote:\s*$`)
 )
 
+func outlookSepCut(s string) int {
+	low := strings.ToLower(s)
+	for _, m := range reOutlookSep.FindAllStringIndex(s, -1) {
+		end := m[1] + 600
+		if end > len(low) {
+			end = len(low)
+		}
+		if strings.Contains(low[m[1]:end], "from:") {
+			return m[0]
+		}
+	}
+	return -1
+}
+
 func trimQuotedHTML(s string) (string, bool) {
 	cut := len(s)
-	if m := reOutlookSep.FindStringIndex(s); m != nil && m[0] < cut {
-		cut = m[0]
+	if i := outlookSepCut(s); i >= 0 && i < cut {
+		cut = i
 	}
 	if m := reOrigMsg.FindStringIndex(s); m != nil && m[0] < cut {
 		cut = m[0]

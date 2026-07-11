@@ -14,6 +14,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	stdhtml "html"
 	"log"
 	"net"
 	"os"
@@ -114,6 +115,7 @@ type command struct {
 	Start   string   `json:"start"`
 	End     string   `json:"end"`
 	Meet    bool     `json:"meet"`
+	Forward string   `json:"forward"`
 }
 
 func (d *daemon) serve(conn net.Conn) {
@@ -460,6 +462,15 @@ func (d *daemon) handle(conn net.Conn, cmd command) {
 			InReplyTo: cmd.ReplyTo, ConvID: cmd.Conv,
 			AttachmentPaths: cmd.Paths,
 		}
+		if cmd.Forward != "" {
+			// Conv locates the original; the forward itself starts a new thread
+			draft.ConvID = ""
+			draft.InReplyTo = ""
+			if err := d.prepareForward(ctx, p, cmd.Conv, cmd.Forward, &draft); err != nil {
+				fail(err)
+				return
+			}
+		}
 		if err := p.Send(ctx, draft); err != nil {
 			fail(err)
 			return
@@ -712,6 +723,66 @@ func firstNonEmpty(a, b string) string {
 		return a
 	}
 	return b
+}
+
+var reTags = regexp.MustCompile(`(?s)<[^>]*>`)
+
+// prepareForward appends the forwarded message as a quoted block and
+// re-attaches its files (fetched vendor-side, staged in the cache).
+func (d *daemon) prepareForward(ctx context.Context, p provider.Provider, convID, msgID string, draft *provider.Draft) error {
+	msgs, err := p.GetConversation(ctx, convID)
+	if err != nil {
+		return err
+	}
+	for _, m := range msgs {
+		if m.ID != msgID {
+			continue
+		}
+		body := m.BodyText
+		if strings.TrimSpace(body) == "" {
+			body = stdhtml.UnescapeString(reTags.ReplaceAllString(m.BodyHTML, ""))
+		}
+		var q strings.Builder
+		q.WriteString(draft.BodyText)
+		q.WriteString("\n\n---------- Forwarded message ----------\n")
+		fmt.Fprintf(&q, "From: %s <%s>\n", m.From.Name, m.From.Email)
+		fmt.Fprintf(&q, "Date: %s\n", m.Date.Format("Mon, 2 Jan 2006 15:04"))
+		fmt.Fprintf(&q, "Subject: %s\n", m.Subject)
+		fmt.Fprintf(&q, "To: %s\n\n", addrList(m.To))
+		q.WriteString(strings.TrimSpace(body))
+		draft.BodyText = q.String()
+
+		dir := filepath.Join(os.Getenv("HOME"), ".cache", "mlqs", "fwd")
+		os.MkdirAll(dir, 0o700)
+		for _, a := range m.Attachments {
+			if a.Name == "" || a.ID == "" {
+				continue
+			}
+			data, err := p.FetchAttachment(ctx, m.ID, a.ID)
+			if err != nil {
+				return fmt.Errorf("fetching %s: %w", a.Name, err)
+			}
+			path := filepath.Join(dir, imgcache.Key(m.ID+a.ID)[:12]+"-"+filepath.Base(a.Name))
+			if err := os.WriteFile(path, data, 0o600); err != nil {
+				return err
+			}
+			draft.AttachmentPaths = append(draft.AttachmentPaths, path)
+		}
+		return nil
+	}
+	return fmt.Errorf("message to forward not found")
+}
+
+func addrList(as []provider.Address) string {
+	parts := make([]string, 0, len(as))
+	for _, a := range as {
+		if a.Name != "" {
+			parts = append(parts, a.Name+" <"+a.Email+">")
+		} else {
+			parts = append(parts, a.Email)
+		}
+	}
+	return strings.Join(parts, ", ")
 }
 
 // openMedia routes images to the family viewer (imv via media-viewer.sh,

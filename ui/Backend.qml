@@ -265,7 +265,8 @@ Singleton {
         send({ type: "send", account: currentAccount,
                to: d.to || "", cc: d.cc || "", bcc: d.bcc || "",
                subject: d.subject || "", body: d.body || "",
-               replyTo: d.replyTo || "", conv: d.conv || "", paths: d.paths || [] })
+               replyTo: d.replyTo || "", conv: d.conv || "",
+               forward: d.forward || "", paths: d.paths || [] })
     }
 
     // ── calendar agenda (merged across accounts) ──

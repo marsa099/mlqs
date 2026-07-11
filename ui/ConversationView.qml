@@ -10,6 +10,12 @@ Rectangle {
     color: Theme.bg
     radius: Theme.radius
 
+    function focusedMsg() {
+        const i = list.currentIndex
+        if (i >= 0 && i < Backend.messages.length) return Backend.messages[i]
+        return Backend.messages.length > 0 ? Backend.messages[Backend.messages.length - 1] : null
+    }
+
     // the focused message when it carries an invite, else null
     function inviteMsg() {
         const i = list.currentIndex

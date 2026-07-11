@@ -53,15 +53,33 @@ Rectangle {
     function focusSel() {
         [toField.input, ccField.input, subjField.input, bodyArea][sel].forceActiveFocus()
     }
-    property string mode: "new"      // "new" | "reply"
+    property string mode: "new"      // "new" | "reply" | "forward"
     property string replyToId: ""
     property string convId: ""
+    property string forwardId: ""
+    property string forwardInfo: ""
     property var paths: []
     signal closed()
 
     function composeNew() {
-        mode = "new"; replyToId = ""; convId = ""; paths = []
+        mode = "new"; replyToId = ""; convId = ""; forwardId = ""; paths = []
         toField.text = ""; ccField.text = ""; subjField.text = ""; bodyArea.text = ""
+        sel = 0
+        visible = true
+        toField.input.forceActiveFocus()
+    }
+
+    // forward a message: daemon quotes the original + re-attaches its files
+    function forward(m) {
+        if (!m || !m.id) return
+        mode = "forward"; replyToId = ""; forwardId = m.id
+        convId = Backend.openConvId; paths = []
+        toField.text = ""; ccField.text = ""; bodyArea.text = ""
+        const subj = m.subject || Backend.openConvSubject
+        subjField.text = subj.match(/^fwd:/i) ? subj : "Fwd: " + subj
+        const atts = (m.attachments || []).filter(a => a.name).length
+        forwardInfo = "↪ forwarding: " + (m.from ? (m.from.name || m.from.email) : "")
+                    + (atts > 0 ? "  · " + atts + " attachment" + (atts > 1 ? "s" : "") : "")
         sel = 0
         visible = true
         toField.input.forceActiveFocus()
@@ -72,7 +90,7 @@ Rectangle {
         const msgs = Backend.messages
         if (msgs.length === 0) return
         const m = msgs[msgs.length - 1]
-        mode = "reply"; replyToId = m.id; convId = Backend.openConvId; paths = []
+        mode = "reply"; replyToId = m.id; convId = Backend.openConvId; forwardId = ""; paths = []
         toField.text = m.from ? m.from.email : ""
         let cc = []
         if (all) {
@@ -94,7 +112,8 @@ Rectangle {
         if (toField.text.trim() === "") { Backend.toast("no recipient"); return }
         Backend.sendMail({
             to: toField.text, cc: ccField.text, subject: subjField.text,
-            body: bodyArea.text, replyTo: replyToId, conv: convId, paths: paths
+            body: bodyArea.text, replyTo: replyToId, conv: convId,
+            forward: forwardId, paths: paths
         })
         close()
     }
@@ -178,9 +197,19 @@ Rectangle {
 
         Text {
             renderType: Text.NativeRendering
-            text: comp.mode === "reply" ? "Reply" : "New message"
+            text: comp.mode === "reply" ? "Reply" : comp.mode === "forward" ? "Forward" : "New message"
             color: Theme.fg
             font.family: Theme.fontFamily; font.pixelSize: 14; font.weight: 600
+        }
+
+        Text {
+            renderType: Text.NativeRendering
+            visible: comp.mode === "forward"
+            width: parent.width
+            text: comp.forwardInfo
+            color: Theme.fg_muted
+            font.family: Theme.fontFamily; font.pixelSize: 12
+            elide: Text.ElideRight
         }
 
         LabeledField { id: toField; label: "To"; idx: 0 }
