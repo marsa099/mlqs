@@ -424,7 +424,7 @@ Rectangle {
                         model: [
                             { label: "accept", status: "accepted", cap: "y" },
                             { label: "maybe", status: "tentative", cap: "m" },
-                            { label: "decline", status: "declined", cap: "x" }
+                            { label: "decline", status: "declined", cap: "n" }
                         ]
                         Rectangle {
                             required property var modelData

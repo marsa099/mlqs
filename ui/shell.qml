@@ -147,11 +147,14 @@ FloatingWindow {
             CapGap {}
             KeyCap { anchors.verticalCenter: parent.verticalCenter; text: "y" }
             KeyCap { anchors.verticalCenter: parent.verticalCenter; text: "m" }
-            KeyCap { anchors.verticalCenter: parent.verticalCenter; text: "x" }
+            KeyCap { anchors.verticalCenter: parent.verticalCenter; text: "n" }
             CapLabel { anchors.verticalCenter: parent.verticalCenter; text: "rsvp" }
             CapGap {}
-            KeyCap { anchors.verticalCenter: parent.verticalCenter; text: "n" }
-            CapLabel { anchors.verticalCenter: parent.verticalCenter; text: "event" }
+            KeyCap { anchors.verticalCenter: parent.verticalCenter; text: "s" }
+            CapLabel { anchors.verticalCenter: parent.verticalCenter; text: "span" }
+            CapGap {}
+            KeyCap { anchors.verticalCenter: parent.verticalCenter; text: "⇧n" }
+            CapLabel { anchors.verticalCenter: parent.verticalCenter; text: "new" }
             CapGap {}
             KeyCap { anchors.verticalCenter: parent.verticalCenter; text: "r" }
             CapLabel { anchors.verticalCenter: parent.verticalCenter; text: "refresh" }
@@ -310,8 +313,11 @@ FloatingWindow {
                 case Qt.Key_O: calview.openBrowser(); break
                 case Qt.Key_Y: calview.rsvp("accepted"); break
                 case Qt.Key_M: calview.rsvp("tentative"); break
-                case Qt.Key_X: calview.rsvp("declined"); break
-                case Qt.Key_N: eventComposer.composeNew(); break
+                case Qt.Key_N:
+                    if (e.modifiers & Qt.ShiftModifier) eventComposer.composeNew()
+                    else calview.rsvp("declined")
+                    break
+                case Qt.Key_S: calview.cycleSpan(); break
                 case Qt.Key_R: Backend.refreshAgenda(); break
                 case Qt.Key_H: win.pane = "sidebar"; break
                 default:
@@ -391,8 +397,7 @@ FloatingWindow {
                 } else win.arm("g")
                 break
             case Qt.Key_X:
-                if (inConv && conv.inviteMsg()) Backend.rsvpMail(conv.inviteMsg().id, "declined")
-                else if (!inConv) Backend.toggleStar(index.current())
+                if (!inConv) Backend.toggleStar(index.current())
                 break
             case Qt.Key_Y:
                 if (inConv && conv.inviteMsg()) Backend.rsvpMail(conv.inviteMsg().id, "accepted")
@@ -432,8 +437,11 @@ FloatingWindow {
             case Qt.Key_F:
                 if (inConv) conv.startHints()
                 break
-            case Qt.Key_C:
             case Qt.Key_N:
+                if (inConv && conv.inviteMsg()) { Backend.rsvpMail(conv.inviteMsg().id, "declined"); break }
+                composer.composeNew()
+                break
+            case Qt.Key_C:
                 composer.composeNew()
                 break
             case Qt.Key_R:

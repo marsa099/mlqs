@@ -36,6 +36,10 @@ Rectangle {
         if (ev) Backend.rsvp(ev, status)
     }
 
+    function cycleSpan() {
+        Backend.setAgendaSpan(Backend.agendaDays === 1 ? 7 : Backend.agendaDays === 7 ? 31 : 1)
+    }
+
     Rectangle {
         id: header
         anchors { top: parent.top; left: parent.left; right: parent.right }
@@ -48,6 +52,36 @@ Rectangle {
             color: Theme.fg; font.family: Theme.fontFamily
             font.hintingPreference: Font.PreferNoHinting
             font.pixelSize: 14; font.weight: 600
+        }
+        // span filter: same pill-tab grammar as the sidebar account tabs
+        Row {
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 4
+            Repeater {
+                model: [{ label: "day", days: 1 }, { label: "week", days: 7 }, { label: "month", days: 31 }]
+                delegate: Rectangle {
+                    required property var modelData
+                    readonly property bool on: Backend.agendaDays === modelData.days
+                    height: 26; radius: 13
+                    width: spanLbl.implicitWidth + 22
+                    color: on ? Qt.rgba(Theme.fg.r, Theme.fg.g, Theme.fg.b, 0.10)
+                         : spanHov.hovered ? Theme.hover : "transparent"
+                    border.width: 1
+                    border.color: on ? Theme.hairline : "transparent"
+                    HoverHandler { id: spanHov }
+                    Text {
+                        id: spanLbl
+                        renderType: Text.NativeRendering
+                        anchors.centerIn: parent
+                        text: modelData.label
+                        color: on ? Theme.fg : Theme.dimmedFg
+                        font.family: Theme.fontFamily; font.hintingPreference: Font.PreferNoHinting
+                        font.pixelSize: 12; font.weight: on ? 500 : 400
+                    }
+                    TapHandler { onTapped: Backend.setAgendaSpan(modelData.days) }
+                }
+            }
         }
     }
 

@@ -20,6 +20,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -470,7 +471,11 @@ func (d *daemon) handle(conn net.Conn, cmd command) {
 			fail(fmt.Errorf("no calendar client (re-run: mlqs auth %s)", cmd.Account))
 			return
 		}
-		evs, err := d.agenda(ctx, cal)
+		days := 14
+		if n, err := strconv.Atoi(cmd.Text); err == nil && n >= 1 && n <= 62 {
+			days = n
+		}
+		evs, err := d.agenda(ctx, cal, days)
 		if err != nil {
 			fail(err)
 			return
@@ -564,14 +569,20 @@ func (d *daemon) handle(conn net.Conn, cmd command) {
 	}
 }
 
-// agenda merges the next 14 days across the account's visible calendars.
-func (d *daemon) agenda(ctx context.Context, cal *gcal.Client) ([]gcal.Event, error) {
+// agenda merges the coming span across the account's visible calendars.
+// days==1 means "today": the window closes at local midnight, not +24h.
+func (d *daemon) agenda(ctx context.Context, cal *gcal.Client, days int) ([]gcal.Event, error) {
 	calendars, err := cal.Calendars(ctx)
 	if err != nil {
 		return nil, err
 	}
-	from := time.Now().Add(-2 * time.Hour)
-	to := time.Now().AddDate(0, 0, 14)
+	now := time.Now()
+	from := now.Add(-2 * time.Hour)
+	to := now.AddDate(0, 0, days)
+	if days == 1 {
+		y, m, dd := now.Date()
+		to = time.Date(y, m, dd+1, 0, 0, 0, 0, time.Local)
+	}
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	var out []gcal.Event

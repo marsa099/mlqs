@@ -273,11 +273,17 @@ Singleton {
         openConvId = ""; messages = []
         refreshAgenda()
     }
+    property int agendaDays: 7   // 1 today · 7 week · 31 month
+    function setAgendaSpan(days) {
+        if (agendaDays === days) return
+        agendaDays = days
+        refreshAgenda()
+    }
     function refreshAgenda() {
         _agendaByAccount = {}
         eventsModel.clear()
         loadingAgenda = true
-        for (const w of workspaces) send({ type: "agenda", account: w.id })
+        for (const w of workspaces) send({ type: "agenda", account: w.id, text: String(agendaDays) })
     }
     function _rebuildAgenda() {
         eventsModel.clear()
