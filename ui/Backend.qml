@@ -382,6 +382,10 @@ Singleton {
             workspaces = e.workspaces || []
             if (currentAccount === "" && workspaces.length > 0)
                 selectAccount(workspaces[0].id)
+            // seed every account's inbox count so tab badges work before
+            // the account is ever visited (folders handler stores them all)
+            for (const w of workspaces)
+                if (w.id !== currentAccount) send({ type: "folders", account: w.id })
         } else if (e.type === "folders") {
             // track every account's inbox count for the tab badges
             const inboxF = (e.folders || []).find(f => f.role === "inbox")
