@@ -132,10 +132,14 @@ Rectangle {
         preferredHighlightEnd: height - 80
         highlightRangeMode: ListView.ApplyRange
 
-        // chat-client scroll feel: 5x wheel gain (Qt's default is treacle)
+        // pagination watches contentY so touchpad (native) scrolling loads too
+        onContentYChanged: if (contentY + height > contentHeight - 800) Backend.loadMore()
+
+        // chat-client scroll feel: 5x MOUSE wheel gain (Qt's default is
+        // treacle); touchpads keep the Flickable's native inertia
         property real scrollGain: 5.0
         WheelHandler {
-            acceptedDevices: PointerDevice.TouchPad | PointerDevice.Mouse
+            acceptedDevices: PointerDevice.Mouse
             onWheel: e => {
                 const px = (e.pixelDelta.y !== 0) ? e.pixelDelta.y : e.angleDelta.y / 8
                 list.contentY -= px * list.scrollGain

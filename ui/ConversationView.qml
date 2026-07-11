@@ -286,7 +286,7 @@ Rectangle {
 
         property real scrollGain: 5.0
         WheelHandler {
-            acceptedDevices: PointerDevice.TouchPad | PointerDevice.Mouse
+            acceptedDevices: PointerDevice.Mouse
             onWheel: e => {
                 const px = (e.pixelDelta.y !== 0) ? e.pixelDelta.y : e.angleDelta.y / 8
                 list.contentY -= px * list.scrollGain
