@@ -10,7 +10,7 @@ Rectangle {
     visible: false
     anchors.centerIn: parent
     width: Math.min(parent.width - 120, 560)
-    height: 388
+    height: 434
     radius: Theme.radius
     color: Theme.bg_alt
     border.width: 1
@@ -48,6 +48,21 @@ Rectangle {
             if (query !== comp.acToken || !comp.visible) return
             comp.acItems = items; comp.acSel = 0
         }
+        function onAccountCalendarsChanged() {
+            if (!comp.visible) return
+            const i = Backend.accountCalendars.findIndex(c => c.primary)
+            comp.calSel = i >= 0 ? i : 0
+        }
+    }
+
+    // target calendar: cycles through the account's calendars; read-only
+    // ones are shown (so shared calendars are discoverable) but refuse create
+    property int calSel: 0
+    readonly property var cals: Backend.accountCalendars
+    readonly property var curCal: cals.length > 0 ? cals[Math.min(calSel, cals.length - 1)] : null
+    readonly property bool curCalWritable: !curCal || curCal.role === "owner" || curCal.role === "writer"
+    function cycleCal(d) {
+        if (cals.length > 0) calSel = (calSel + (d || 1) + cals.length) % cals.length
     }
 
     function composeNew() {
@@ -60,12 +75,15 @@ Rectangle {
         durField.text = "30"
         meet = true
         sel = 0
+        calSel = 0
+        Backend.requestCalendars()
         visible = true
         titleField.input.forceActiveFocus()
     }
 
     function doCreate() {
         if (titleField.text.trim() === "") { Backend.toast("no title"); return }
+        if (!curCalWritable) { Backend.toast((curCal ? curCal.name : "calendar") + " is read-only for you"); return }
         const start = dateField.text.trim() + " " + startField.text.trim()
         const mins = parseInt(durField.text, 10) || 30
         const sd = new Date(dateField.text.trim() + "T" + startField.text.trim())
@@ -76,6 +94,7 @@ Rectangle {
             start: start,
             end: Qt.formatDate(ed, "yyyy-MM-dd") + " " + Qt.formatTime(ed, "hh:mm"),
             attendees: attField.text, location: locField.text.trim(),
+            calId: curCal && !curCal.primary ? curCal.id : "",
             meet: meet && attField.text.trim() !== ""
         })
         close()
@@ -159,6 +178,43 @@ Rectangle {
         LabeledField { id: attField; label: "Invite"; idx: 4; hint: "emails, comma-separated" }
         LabeledField { id: locField; label: "Where"; idx: 5 }
 
+        // target calendar: ↵/i cycles (not a text field)
+        Rectangle {
+            width: parent.width; height: 34
+            radius: Theme.radiusSm
+            color: Theme.mode === "light" ? Theme.bg : Theme.surface2
+            border.width: 1
+            border.color: (comp.sel === 6 && !comp.editing) ? Theme.fg_muted : Theme.hairline
+            Row {
+                anchors.fill: parent; anchors.leftMargin: 10
+                spacing: 8
+                Text {
+                    renderType: Text.NativeRendering
+                    text: "Calendar"; color: Theme.fg_muted
+                    width: 66
+                    font.family: Theme.fontFamily; font.pixelSize: 12
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+                Text {
+                    renderType: Text.NativeRendering
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: comp.curCal ? (comp.curCal.primary ? Backend.currentAccount + " (primary)" : comp.curCal.name)
+                                        + (comp.curCalWritable ? "" : "  · read-only") : "primary"
+                    color: comp.curCalWritable ? Theme.fg : Theme.fg_muted
+                    font.family: Theme.fontFamily; font.pixelSize: 13
+                }
+                Text {
+                    renderType: Text.NativeRendering
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: comp.cals.length > 1
+                    text: "↵ cycles"
+                    color: Theme.fg_muted
+                    font.family: Theme.fontFamily; font.pixelSize: 11
+                }
+            }
+            TapHandler { onTapped: comp.cycleCal(1) }
+        }
+
         Row {
             spacing: 8
             Rectangle {
@@ -231,12 +287,15 @@ Rectangle {
             const ctrl = e.modifiers & Qt.ControlModifier
             if (ctrl && (e.key === Qt.Key_Return || e.key === Qt.Key_Enter)) { comp.doCreate(); e.accepted = true; return }
             switch (e.key) {
-            case Qt.Key_J: comp.sel = Math.min(comp.fields.length - 1, comp.sel + 1); break
+            case Qt.Key_J: comp.sel = Math.min(comp.fields.length, comp.sel + 1); break
             case Qt.Key_K: comp.sel = Math.max(0, comp.sel - 1); break
             case Qt.Key_M: comp.meet = !comp.meet; break
             case Qt.Key_I:
             case Qt.Key_Return:
-            case Qt.Key_Enter: comp.focusSel(); break
+            case Qt.Key_Enter:
+                if (comp.sel === comp.fields.length) comp.cycleCal(1)
+                else comp.focusSel()
+                break
             case Qt.Key_Escape:
             case Qt.Key_Q: comp.close(); break
             default: return

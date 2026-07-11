@@ -142,7 +142,7 @@ func (d *daemon) serve(conn net.Conn) {
 		case "ping":
 			d.sendTo(conn, map[string]any{"type": "pong"})
 		case "folders", "conversations", "conversation", "openhtml", "openatt", "search", "threads", "contacts", "markread", "star", "archive", "unarchive", "trash", "untrash", "send",
-			"agenda", "rsvp", "rsvpmail", "createevent":
+			"agenda", "rsvp", "rsvpmail", "createevent", "calendars":
 			go d.handle(conn, cmd)
 		default:
 			d.sendTo(conn, map[string]any{"type": "toast",
@@ -481,6 +481,18 @@ func (d *daemon) handle(conn net.Conn, cmd command) {
 			return
 		}
 		d.sendTo(conn, map[string]any{"type": "agenda", "account": cmd.Account, "events": evs})
+	case "calendars":
+		cal := d.cals[cmd.Account]
+		if cal == nil {
+			fail(fmt.Errorf("no calendar client"))
+			return
+		}
+		cs, err := cal.Calendars(ctx)
+		if err != nil {
+			fail(err)
+			return
+		}
+		d.sendTo(conn, map[string]any{"type": "calendars", "account": cmd.Account, "calendars": cs})
 	case "rsvp":
 		// Folder carries the calendar id, Text the response status
 		cal := d.cals[cmd.Account]
@@ -557,7 +569,11 @@ func (d *daemon) handle(conn net.Conn, cmd command) {
 		for _, a := range parseAddrs(cmd.To) {
 			atts = append(atts, a.Email)
 		}
-		ev, err := cal.Create(ctx, "primary", gcal.NewEvent{
+		calID := cmd.Folder
+		if calID == "" {
+			calID = "primary"
+		}
+		ev, err := cal.Create(ctx, calID, gcal.NewEvent{
 			Title: cmd.Subject, Location: cmd.Query, Notes: cmd.Body,
 			Start: start, End: end, Attendees: atts, Meet: cmd.Meet,
 		})

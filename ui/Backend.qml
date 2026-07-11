@@ -337,9 +337,14 @@ Singleton {
     }
     function createEvent(d) {
         send({ type: "createevent", account: d.account || currentAccount,
-               subject: d.title || "", query: d.location || "", body: d.notes || "",
-               to: d.attendees || "", start: d.start, end: d.end, meet: !!d.meet })
+               folder: d.calId || "", subject: d.title || "", query: d.location || "",
+               body: d.notes || "", to: d.attendees || "",
+               start: d.start, end: d.end, meet: !!d.meet })
     }
+
+    // target-calendar list for the event composer's picker
+    property var accountCalendars: []
+    function requestCalendars() { send({ type: "calendars", account: currentAccount }) }
 
     function runSearch(q) {
         if (!q) return
@@ -460,6 +465,8 @@ Singleton {
             m[e.account] = e.events || []
             _agendaByAccount = m
             if (currentFolderId === "__calendar") _rebuildAgenda()
+        } else if (e.type === "calendars") {
+            if (e.account === currentAccount) accountCalendars = e.calendars || []
         } else if (e.type === "rsvped") {
             toast("rsvp saved" + (e.status ? ": " + e.status : ""))
         } else if (e.type === "eventcreated") {

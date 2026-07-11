@@ -84,6 +84,7 @@ type Calendar struct {
 	Name    string `json:"name"`
 	Primary bool   `json:"primary"`
 	Color   string `json:"color"`
+	Role    string `json:"role"` // owner|writer|reader|freeBusyReader
 }
 
 type Attendee struct {
@@ -223,7 +224,7 @@ func (c *Client) Calendars(ctx context.Context) ([]Calendar, error) {
 		if !it.Selected && !it.Primary {
 			continue
 		}
-		out = append(out, Calendar{ID: it.ID, Name: it.Summary, Primary: it.Primary, Color: it.BgColor})
+		out = append(out, Calendar{ID: it.ID, Name: it.Summary, Primary: it.Primary, Color: it.BgColor, Role: it.Role})
 	}
 	return out, nil
 }
