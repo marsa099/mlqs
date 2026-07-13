@@ -122,8 +122,18 @@ button open Teams in the browser).
 Bring your own Azure app registration (free, ~10 minutes, no admin
 consent needed for your own mailbox):
 
+> **You do not need to register anything in your employer's tenant.**
+> Register the app with *any* Microsoft account — a free personal one is
+> fine (App Registrations costs nothing, no subscription needed). Because
+> the registration is multitenant, your work account signs in to it at
+> consent time. Registration and consent are separate: the app's identity
+> lives wherever you create it; your employer's tenant only sees a consent
+> request. (One registration can also be shared — the client ID is a
+> public PKCE identifier, not a secret.)
+
 1. Go to [portal.azure.com](https://portal.azure.com) → **Microsoft Entra
-   ID → App registrations → New registration**.
+   ID → App registrations → New registration** — signed in with any
+   Microsoft account, personal is fine.
 2. Name it (e.g. `mlqs`). Under **Supported account types** pick
    *"Accounts in any organizational directory and personal Microsoft
    accounts"* — that covers both work M365 and personal outlook.com.
