@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import Quickshell
+import Quickshell.Io
 import "."
 import QsLib
 
@@ -13,6 +14,15 @@ FloatingWindow {
     color: Theme.bg_alt
 
     component CapGap: Item { width: 8; height: 1 }
+
+    // warm-summon: the launch script calls this instead of cold-starting
+    // when a hidden instance is alive
+    IpcHandler {
+        target: "mail"
+        // "summon", not "show" — `qs ipc show` is a CLI builtin and shadows it
+        function summon(): void { win.visible = true }
+        function dismiss(): void { win.visible = false }
+    }
 
     readonly property bool insertMode: (Backend.openConvId !== "" && conv.replyHasFocus)
                                        || composer.visible || eventComposer.visible || index.searchFocus
@@ -333,7 +343,7 @@ FloatingWindow {
                 case Qt.Key_R: Backend.refreshAgenda(); break
                 case Qt.Key_I: Backend.jumpRole("inbox"); break
                 case Qt.Key_T: Backend.selectThreads(); break
-                case Qt.Key_Q: Qt.quit(); break
+                case Qt.Key_Q: win.visible = false; break
                 case Qt.Key_H: win.pane = "sidebar"; break
                 default:
                     if (e.key >= Qt.Key_0 && e.key <= Qt.Key_9) {
@@ -449,7 +459,7 @@ FloatingWindow {
                 break
             case Qt.Key_Q:
                 if (inConv) Backend.closeConv()
-                else Qt.quit()   // read-and-discard: q from the index closes the app
+                else win.visible = false   // hide, stay warm — super+m remaps instantly
                 break
             case Qt.Key_V:
                 if (!inConv && win.pane === "index") index.visualStart()
