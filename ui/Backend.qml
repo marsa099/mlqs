@@ -25,12 +25,19 @@ Singleton {
     property string openConvSubject: ""
 
     // flat display row for the ListModel (nested arrays don't survive it)
+    // Gmail digests label changes lazily: a sync tick in the gap after
+    // markread still reports UNREAD (same race the daemon dodges for folder
+    // counts) and would re-bold a row we just read — with nothing after to
+    // correct it. Recently-read threads hold their local read state.
+    property var readGrace: ({})
+
     function toRow(c) {
+        const graced = (Date.now() - (readGrace[c.id] || 0)) < 90000
         return {
             tid: c.id, subject: c.subject || "", snippet: c.snippet || "",
             who: senderLine(c) + ((c.msgCount || 1) > 1 ? " (" + c.msgCount + ")" : ""),
             dateStr: fmtDate(c.date), dateMs: new Date(c.date).getTime(),
-            unread: !!c.unread, starred: !!c.starred
+            unread: !!c.unread && !graced, starred: !!c.starred
         }
     }
     function findRow(id) {
@@ -115,6 +122,8 @@ Singleton {
     }
 
     function setLocalRead(id, read) {
+        if (read) readGrace[id] = Date.now()
+        else delete readGrace[id]
         const i = findRow(id)
         if (i >= 0) convsModel.setProperty(i, "unread", !read)
         folders = folders.map(f => f.id === currentFolderId
