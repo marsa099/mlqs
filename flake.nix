@@ -29,7 +29,12 @@
           # everyone else falls back to the vendored snapshot in the package
           export QML2_IMPORT_PATH="$HOME/.local/share/qml:${daemon}/share/mlqs/ui/vendor''${QML2_IMPORT_PATH:+:$QML2_IMPORT_PATH}"
           sock="$XDG_RUNTIME_DIR/mlqs.sock"
-          if ! pgrep -x mlqs >/dev/null 2>&1; then
+          alive=""
+          for pid in $(pgrep -x mlqs 2>/dev/null); do
+            # a zombie (unreaped child) matches pgrep but serves nothing
+            case "$(ps -o stat= -p "$pid" 2>/dev/null)" in Z*|"") ;; *) alive=1 ;; esac
+          done
+          if [ -z "$alive" ]; then
             rm -f "$sock"
             setsid nohup ${daemon}/bin/mlqs >/tmp/mlqs-daemon.log 2>&1 </dev/null &
           fi
