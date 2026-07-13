@@ -15,7 +15,7 @@ Rectangle {
     Behavior on opacity { NumberAnimation { duration: 120 } }
 
     // gutter shortcut chip: these keys jump globally from normal mode
-    readonly property var roleKey: ({ inbox: "i", sent: "s" })
+    readonly property var roleKey: ({ inbox: "I", sent: "S", drafts: "D", spam: "P" })
     component JumpCap: KeyCap {
         property string cap: ""
         property bool onInk: false
@@ -151,7 +151,7 @@ Rectangle {
             width: 3; height: 16; radius: 2; color: Theme.cursor
         }
         JumpCap {
-            cap: "t"; onInk: threadsRow.primary
+            cap: "T"; onInk: threadsRow.primary
             visible: !(bar.active && bar.sel === -2)
             anchors.left: parent.left; anchors.leftMargin: 10
             anchors.verticalCenter: parent.verticalCenter
@@ -205,7 +205,7 @@ Rectangle {
             width: 3; height: 16; radius: 2; color: Theme.cursor
         }
         JumpCap {
-            cap: "c"; onInk: calRow.primary
+            cap: "C"; onInk: calRow.primary
             visible: !(bar.active && bar.sel === -1)
             anchors.left: parent.left; anchors.leftMargin: 10
             anchors.verticalCenter: parent.verticalCenter

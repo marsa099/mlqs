@@ -209,11 +209,8 @@ FloatingWindow {
             KeyCap { anchors.verticalCenter: parent.verticalCenter; text: "k" }
             CapLabel { anchors.verticalCenter: parent.verticalCenter; text: "move" }
             CapGap {}
-            KeyCap { anchors.verticalCenter: parent.verticalCenter; text: "i" }
-            KeyCap { anchors.verticalCenter: parent.verticalCenter; text: "t" }
-            KeyCap { anchors.verticalCenter: parent.verticalCenter; text: "c" }
-            KeyCap { anchors.verticalCenter: parent.verticalCenter; text: "s" }
-            CapLabel { anchors.verticalCenter: parent.verticalCenter; text: "jump" }
+            KeyCap { anchors.verticalCenter: parent.verticalCenter; text: "I·T·C·S" }
+            CapLabel { anchors.verticalCenter: parent.verticalCenter; text: "goto" }
             CapGap {}
             KeyCap { anchors.verticalCenter: parent.verticalCenter; text: "↵" }
             CapLabel { anchors.verticalCenter: parent.verticalCenter; text: "open" }
@@ -330,6 +327,18 @@ FloatingWindow {
                     else if (win.gPending) { win.gPending = false; calview.toTop() }
                     else win.arm("g")
                     break
+                case Qt.Key_I:
+                    if (e.modifiers & Qt.ShiftModifier) Backend.jumpRole("inbox")
+                    break
+                case Qt.Key_T:
+                    if (e.modifiers & Qt.ShiftModifier) Backend.selectThreads()
+                    break
+                case Qt.Key_D:
+                    if (e.modifiers & Qt.ShiftModifier) Backend.jumpRole("drafts")
+                    break
+                case Qt.Key_P:
+                    if (e.modifiers & Qt.ShiftModifier) Backend.jumpRole("spam")
+                    break
                 case Qt.Key_Return:
                 case Qt.Key_Enter: calview.open(); break
                 case Qt.Key_O: calview.openBrowser(); break
@@ -339,10 +348,11 @@ FloatingWindow {
                     if (e.modifiers & Qt.ShiftModifier) eventComposer.composeNew()
                     else calview.rsvp("declined")
                     break
-                case Qt.Key_S: calview.cycleSpan(); break
+                case Qt.Key_S:
+                    if (e.modifiers & Qt.ShiftModifier) Backend.jumpRole("sent")
+                    else calview.cycleSpan()
+                    break
                 case Qt.Key_R: Backend.refreshAgenda(); break
-                case Qt.Key_I: Backend.jumpRole("inbox"); break
-                case Qt.Key_T: Backend.selectThreads(); break
                 case Qt.Key_Q: win.visible = false; break
                 case Qt.Key_H: win.pane = "sidebar"; break
                 default:
@@ -368,6 +378,25 @@ FloatingWindow {
                 e.accepted = true; return
             }
             if (ctrl) return
+
+            if (win.gPending && e.key === Qt.Key_G) {
+                win.gPending = false
+                if (inConv) conv.toTop(); else index.toTop()
+                e.accepted = true; return
+            }
+
+            // capital goto: I inbox · T threads · C calendar · S sent ·
+            // D drafts · P spam — one shifted keystroke from anywhere shallow
+            if (!inConv && (e.modifiers & Qt.ShiftModifier)) {
+                const jumps = ({ [Qt.Key_I]: "inbox", [Qt.Key_S]: "sent",
+                                 [Qt.Key_D]: "drafts", [Qt.Key_P]: "spam" })
+                if (jumps[e.key] !== undefined) {
+                    Backend.jumpRole(jumps[e.key]); win.pane = "index"
+                    e.accepted = true; return
+                }
+                if (e.key === Qt.Key_T) { Backend.selectThreads(); win.pane = "index"; e.accepted = true; return }
+                if (e.key === Qt.Key_C) { Backend.selectCalendar(); win.pane = "index"; e.accepted = true; return }
+            }
 
             // count prefix digits (0 only continues an existing count)
             if (e.key >= Qt.Key_0 && e.key <= Qt.Key_9) {
@@ -416,9 +445,6 @@ FloatingWindow {
             case Qt.Key_G:
                 if (e.modifiers & Qt.ShiftModifier) {
                     if (inConv) conv.toEnd(); else index.toEnd()
-                } else if (win.gPending) {
-                    win.gPending = false
-                    if (inConv) conv.toTop(); else index.toTop()
                 } else win.arm("g")
                 break
             case Qt.Key_X:
@@ -443,13 +469,6 @@ FloatingWindow {
                 break
             case Qt.Key_I:
                 if (inConv) conv.focusReply()
-                else { Backend.jumpRole("inbox"); win.pane = "index" }
-                break
-            case Qt.Key_T:
-                if (!inConv) { Backend.selectThreads(); win.pane = "index" }
-                break
-            case Qt.Key_S:
-                if (!inConv) { Backend.jumpRole("sent"); win.pane = "index" }
                 break
             case Qt.Key_A:
                 if (inConv) Backend.openConvId !== "" && (conv.replyAll = !conv.replyAll)
@@ -475,9 +494,7 @@ FloatingWindow {
                 if (inConv && conv.inviteMsg()) { Backend.rsvpMail(conv.inviteMsg().id, "declined"); break }
                 composer.composeNew()
                 break
-            case Qt.Key_C:
-                if (!inConv) { Backend.selectCalendar(); win.pane = "index" }
-                break
+
             case Qt.Key_R:
                 // in a thread: R picks the focused message as reply target
                 if (inConv) conv.replyToFocused()
