@@ -1,7 +1,8 @@
 # mlqs
 
-Native Linux mail client: Go daemon + Quickshell/QML UI. Gmail (and one day
-Outlook) via the vendors' REST APIs — no IMAP. Vim bindings throughout.
+Native Linux mail client: Go daemon + Quickshell/QML UI. Gmail and
+Outlook/Microsoft 365 (mail + calendar, Teams/Meet links) via the vendors'
+REST APIs — no IMAP. Vim bindings throughout. Wayland only (quickshell).
 Sibling of [slqs](https://github.com/daphen/slqs) (Slack) and dsqrd (Discord).
 
 - Unread-first inbox, Threads view (conversations you participate in)
@@ -32,7 +33,7 @@ Personal Gmail + work Microsoft 365 in one client:
   "accounts": [
     { "name": "personal", "vendor": "gmail",
       "email": "you@gmail.com",
-      "credentials_file": "~/.config/mlqs/google-client.json" },
+      "credentials_file": "~/.config/mlqs/google.json" },
     { "name": "work", "vendor": "outlook",
       "email": "you@company.com",
       "client_id": "<azure-application-client-id>" }
@@ -165,7 +166,8 @@ Manual:
 
 ```
 go build -o mlqs . && ./mlqs &    # daemon (unix socket in $XDG_RUNTIME_DIR)
-quickshell -p ui/shell.qml        # UI
+QML2_IMPORT_PATH=$PWD/ui/vendor quickshell -p ui/shell.qml   # UI
+# (the nix wrapper sets this for you; vendored QsLib lives in ui/vendor)
 ```
 
 ## Keys (chin shows context-relevant ones)
