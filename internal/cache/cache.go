@@ -4,8 +4,12 @@ package cache
 
 import (
 	"database/sql"
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"time"
+
+	"mlqs/internal/provider"
 
 	_ "modernc.org/sqlite"
 )
@@ -75,6 +79,127 @@ func (d *DB) SetDeltaToken(account, token string, syncedAt int64) error {
 		ON CONFLICT(account) DO UPDATE SET delta_token=excluded.delta_token, synced_at=excluded.synced_at`,
 		account, token, syncedAt)
 	return err
+}
+
+func b2i(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+// UpsertConversations persists the list rows for warm-start rendering. Called
+// on every live fetch and delta update, so the cache tracks what the UI last
+// saw. senders/folder membership are stored as JSON.
+func (d *DB) UpsertConversations(account string, convs []provider.Conversation) {
+	if len(convs) == 0 {
+		return
+	}
+	tx, err := d.Begin()
+	if err != nil {
+		return
+	}
+	stmt, err := tx.Prepare(`INSERT INTO conversations(account,id,folder_ids,subject,snippet,senders_json,date,unread,starred,has_attach,msg_count)
+		VALUES(?,?,?,?,?,?,?,?,?,?,?)
+		ON CONFLICT(account,id) DO UPDATE SET
+			folder_ids=excluded.folder_ids, subject=excluded.subject, snippet=excluded.snippet,
+			senders_json=excluded.senders_json, date=excluded.date, unread=excluded.unread,
+			starred=excluded.starred, has_attach=excluded.has_attach, msg_count=excluded.msg_count`)
+	if err != nil {
+		tx.Rollback()
+		return
+	}
+	defer stmt.Close()
+	for _, c := range convs {
+		fj, _ := json.Marshal(c.FolderIDs)
+		sj, _ := json.Marshal(c.Senders)
+		stmt.Exec(account, c.ID, string(fj), c.Subject, c.Snippet, string(sj),
+			c.Date.Unix(), b2i(c.Unread), b2i(c.Starred), b2i(c.HasAttach), c.MsgCount)
+	}
+	tx.Commit()
+}
+
+func (d *DB) RemoveConversation(account, id string) {
+	d.Exec(`DELETE FROM conversations WHERE account=? AND id=?`, account, id)
+}
+
+// SetConvFlags mirrors a local read/star toggle into the cache so the warm
+// paint after a restart reflects the action (the next live fetch is still
+// authoritative). col must be "unread" or "starred" — caller-fixed, not input.
+func (d *DB) SetConvFlags(account, id, col string, v bool) {
+	if col != "unread" && col != "starred" {
+		return
+	}
+	d.Exec(`UPDATE conversations SET `+col+`=? WHERE account=? AND id=?`, b2i(v), account, id)
+}
+
+// CachedConversations returns a folder's rows for the instant paint, unread
+// pinned on top then newest-first — the same order the live stitch produces.
+// folder_ids is a JSON array; the quoted-id LIKE matches one token exactly.
+func (d *DB) CachedConversations(account, folder string, limit int) []provider.Conversation {
+	rows, err := d.Query(`SELECT id,folder_ids,subject,snippet,senders_json,date,unread,starred,has_attach,msg_count
+		FROM conversations WHERE account=? AND folder_ids LIKE ?
+		ORDER BY unread DESC, date DESC LIMIT ?`, account, `%"`+folder+`"%`, limit)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []provider.Conversation
+	for rows.Next() {
+		var c provider.Conversation
+		var fj, sj string
+		var date int64
+		var unread, starred, hasAttach int
+		if rows.Scan(&c.ID, &fj, &c.Subject, &c.Snippet, &sj, &date,
+			&unread, &starred, &hasAttach, &c.MsgCount) != nil {
+			continue
+		}
+		json.Unmarshal([]byte(fj), &c.FolderIDs)
+		json.Unmarshal([]byte(sj), &c.Senders)
+		c.Date = time.Unix(date, 0)
+		c.Unread, c.Starred, c.HasAttach = unread != 0, starred != 0, hasAttach != 0
+		out = append(out, c)
+	}
+	return out
+}
+
+func (d *DB) UpsertFolders(account string, folders []provider.Folder) {
+	if len(folders) == 0 {
+		return
+	}
+	tx, err := d.Begin()
+	if err != nil {
+		return
+	}
+	stmt, err := tx.Prepare(`INSERT INTO folders(account,id,name,role,unread,total)
+		VALUES(?,?,?,?,?,?)
+		ON CONFLICT(account,id) DO UPDATE SET
+			name=excluded.name, role=excluded.role, unread=excluded.unread, total=excluded.total`)
+	if err != nil {
+		tx.Rollback()
+		return
+	}
+	defer stmt.Close()
+	for _, f := range folders {
+		stmt.Exec(account, f.ID, f.Name, f.Role, f.Unread, f.Total)
+	}
+	tx.Commit()
+}
+
+func (d *DB) CachedFolders(account string) []provider.Folder {
+	rows, err := d.Query(`SELECT id,name,role,unread,total FROM folders WHERE account=?`, account)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []provider.Folder
+	for rows.Next() {
+		var f provider.Folder
+		if rows.Scan(&f.ID, &f.Name, &f.Role, &f.Unread, &f.Total) == nil {
+			out = append(out, f)
+		}
+	}
+	return out
 }
 
 func (d *DB) UpsertContact(account, email, name string, ts int64) {

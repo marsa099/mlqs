@@ -39,6 +39,7 @@ func (d *daemon) syncOnce(account string, p provider.Provider) {
 		debuglog.Sync("%s: full resync baseline %s", account, delta.NextToken)
 		// seed the per-account tab badges at startup
 		if fs, err := p.ListFolders(ctx); err == nil {
+			d.db.UpsertFolders(account, fs)
 			d.broadcast(map[string]any{"type": "folders", "account": account, "folders": fs})
 		}
 		return
@@ -66,9 +67,11 @@ func (d *daemon) syncOnce(account string, p provider.Provider) {
 			conv, err := p.GetConversationMeta(ctx, id)
 			if err != nil {
 				// thread gone (permanent delete) → drop it from any open view
+				d.db.RemoveConversation(account, id)
 				d.broadcast(map[string]any{"type": "convRemoved", "account": account, "id": id})
 				return
 			}
+			d.db.UpsertConversations(account, []provider.Conversation{conv})
 			d.broadcast(map[string]any{"type": "convUpdated", "account": account, "conv": conv})
 			d.maybeNotify(account, conv)
 		}(id)
@@ -79,6 +82,7 @@ func (d *daemon) syncOnce(account string, p provider.Provider) {
 
 	// badges: recount folders after any change batch
 	if fs, err := p.ListFolders(ctx); err == nil {
+		d.db.UpsertFolders(account, fs)
 		d.broadcast(map[string]any{"type": "folders", "account": account, "folders": fs})
 	}
 }

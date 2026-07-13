@@ -187,11 +187,17 @@ func (d *daemon) handle(conn net.Conn, cmd command) {
 	}
 	switch cmd.Type {
 	case "folders":
+		// warm-start: cached sidebar first (also auto-selects inbox → cached
+		// inbox paint), then the authoritative live list
+		if cached := d.db.CachedFolders(cmd.Account); len(cached) > 0 {
+			d.sendTo(conn, map[string]any{"type": "folders", "account": cmd.Account, "folders": cached})
+		}
 		fs, err := p.ListFolders(ctx)
 		if err != nil {
 			fail(err)
 			return
 		}
+		d.db.UpsertFolders(cmd.Account, fs)
 		d.sendTo(conn, map[string]any{"type": "folders", "account": cmd.Account, "folders": fs})
 	case "conversations":
 		if cmd.Cursor != "" {
@@ -200,9 +206,15 @@ func (d *daemon) handle(conn net.Conn, cmd command) {
 				fail(err)
 				return
 			}
+			d.db.UpsertConversations(cmd.Account, pg.Conversations)
 			d.sendTo(conn, map[string]any{"type": "conversations", "account": cmd.Account,
 				"folder": cmd.Folder, "items": pg.Conversations, "next": pg.NextCursor})
 			return
+		}
+		// warm-start: paint the cached folder instantly, then fetch live below
+		if cached := d.db.CachedConversations(cmd.Account, cmd.Folder, 200); len(cached) > 0 {
+			d.sendTo(conn, map[string]any{"type": "conversations", "account": cmd.Account,
+				"folder": cmd.Folder, "items": cached, "cached": true})
 		}
 		// First page: unreads pin to the top — fetch the folder's full unread
 		// set (capped) and the newest page of everything, stitched. Deep-buried
@@ -250,6 +262,7 @@ func (d *daemon) handle(conn net.Conn, cmd command) {
 				items = append(items, c)
 			}
 		}
+		d.db.UpsertConversations(cmd.Account, items)
 		d.sendTo(conn, map[string]any{"type": "conversations", "account": cmd.Account,
 			"folder": cmd.Folder, "items": items, "next": normal.NextCursor})
 	case "conversation":
@@ -429,6 +442,7 @@ func (d *daemon) handle(conn net.Conn, cmd command) {
 		if err := p.MarkRead(ctx, cmd.ID, cmd.Text != "false"); err != nil {
 			fail(err)
 		} else {
+			d.db.SetConvFlags(cmd.Account, cmd.ID, "unread", cmd.Text == "false")
 			// rebroadcast counts once Gmail has digested the change — a sync
 			// tick in the gap otherwise overwrites the UI's local decrement
 			go func(account string) {
@@ -443,6 +457,8 @@ func (d *daemon) handle(conn net.Conn, cmd command) {
 	case "star":
 		if err := p.Star(ctx, cmd.ID, cmd.Text != "false"); err != nil {
 			fail(err)
+		} else {
+			d.db.SetConvFlags(cmd.Account, cmd.ID, "starred", cmd.Text != "false")
 		}
 	case "archive":
 		if err := p.Archive(ctx, cmd.ID); err != nil {

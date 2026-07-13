@@ -20,6 +20,9 @@ Singleton {
     property string nextCursor: ""
     property string pendingCursor: ""
     property bool loadingConvs: false
+    // folder id whose authoritative (live) page has landed — gates the cached
+    // warm-paint so it can't clobber fresh data mid-load
+    property string _freshFolder: ""
     property var messages: []
     property string openConvId: ""
     property string openConvSubject: ""
@@ -413,10 +416,22 @@ Singleton {
                 if (inbox) _loadFolder(inbox.id, inbox.name)
             }
         } else if (e.type === "conversations") {
-            loadingConvs = false
             if (e.account !== currentAccount) return
             if ((e.folder || "") !== currentFolderId) return
             const items = e.items || []
+            if (e.cached) {
+                // warm-start paint: fill instantly, but never overwrite a live
+                // result that already landed for this folder (races the fetch)
+                if (pendingCursor === "" && _freshFolder !== currentFolderId) {
+                    convsModel.clear()
+                    for (const c of items) if (findRow(c.id) < 0) convsModel.append(toRow(c))
+                    loadingConvs = false
+                }
+                return
+            }
+            // live result — authoritative; replaces the cached paint
+            loadingConvs = false
+            _freshFolder = currentFolderId
             if (pendingCursor !== "") pendingCursor = ""
             else convsModel.clear()
             // later pages can overlap the stitched unread block — dedup
