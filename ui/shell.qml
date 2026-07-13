@@ -323,7 +323,7 @@ FloatingWindow {
             }
 
             // g-prefix goto, case-sensitive: gg top · gi inbox · gI important
-            // · gt threads · gc calendar · gs sent · gS spam · gd drafts
+            // · gt threads · gT trash · gc calendar · gs sent · gS spam · gd drafts
             // bare modifier presses must not eat the g-prefix (g→⇧→I is
             // three key events; Shift alone would clear the pending flag)
             if (win.gPending && e.key !== Qt.Key_Shift && e.key !== Qt.Key_Control
@@ -343,7 +343,10 @@ FloatingWindow {
                 case Qt.Key_I: go(shifted ? "starred" : "inbox"); e.accepted = true; return
                 case Qt.Key_S: go(shifted ? "spam" : "sent"); e.accepted = true; return
                 case Qt.Key_D: go("drafts"); e.accepted = true; return
-                case Qt.Key_T: Backend.selectThreads(); win.pane = "index"; e.accepted = true; return
+                case Qt.Key_T:
+                    if (shifted) go("trash")
+                    else { Backend.selectThreads(); win.pane = "index" }
+                    e.accepted = true; return
                 case Qt.Key_C: Backend.selectCalendar(); win.pane = "index"; e.accepted = true; return
                 }
             }
