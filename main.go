@@ -149,6 +149,16 @@ func (d *daemon) serve(conn net.Conn) {
 			d.broadcast(map[string]any{"type": "summon"})
 		case "dismissui":
 			d.broadcast(map[string]any{"type": "dismiss"})
+		case "notifact":
+			// bar history fallback: re-dispatch a notification's action when
+			// its live D-Bus object is gone (cmd.ID = server id, Text = action)
+			if id, err := strconv.ParseUint(cmd.ID, 10, 32); err == nil {
+				act := cmd.Text
+				if act == "" {
+					act = "default"
+				}
+				d.notifier.InvokeByID(uint32(id), act)
+			}
 		case "folders", "conversations", "conversation", "openhtml", "openatt", "search", "threads", "contacts", "markread", "star", "archive", "unarchive", "trash", "untrash", "send",
 			"agenda", "rsvp", "rsvpmail", "createevent", "calendars":
 			go d.handle(conn, cmd)
