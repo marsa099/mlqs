@@ -333,6 +333,7 @@ FloatingWindow {
                 case Qt.Key_R: Backend.refreshAgenda(); break
                 case Qt.Key_I: Backend.jumpRole("inbox"); break
                 case Qt.Key_T: Backend.selectThreads(); break
+                case Qt.Key_Q: Qt.quit(); break
                 case Qt.Key_H: win.pane = "sidebar"; break
                 default:
                     if (e.key >= Qt.Key_0 && e.key <= Qt.Key_9) {
@@ -448,6 +449,7 @@ FloatingWindow {
                 break
             case Qt.Key_Q:
                 if (inConv) Backend.closeConv()
+                else Qt.quit()   // read-and-discard: q from the index closes the app
                 break
             case Qt.Key_V:
                 if (!inConv && win.pane === "index") index.visualStart()
