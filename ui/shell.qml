@@ -102,6 +102,11 @@ FloatingWindow {
         onClosed: keys.forceActiveFocus()
     }
 
+    CheatSheet {
+        id: cheatSheet
+        z: 100
+    }
+
     FeedbackPill {
         id: toast
         anchors.horizontalCenter: parent.horizontalCenter
@@ -281,6 +286,18 @@ FloatingWindow {
             const ctrl = e.modifiers & Qt.ControlModifier
             const inConv = Backend.openConvId !== ""
 
+            // cheat sheet swallows the keyboard while open; esc or ? dismisses
+            if (cheatSheet.shown) {
+                if (e.key === Qt.Key_Escape || e.key === Qt.Key_Question)
+                    cheatSheet.shown = false
+                e.accepted = true; return
+            }
+            // ? opens the reference from any non-insert mode (search owns focus
+            // when active, so it never steals a typed "?")
+            if (e.key === Qt.Key_Question) {
+                cheatSheet.shown = true; e.accepted = true; return
+            }
+
             // hint mode owns Esc + label letters; any OTHER key drops the
             // hints and handles normally (Shift+J/K message nav, scrolling…)
             if (inConv && conv.hinting) {
@@ -297,6 +314,13 @@ FloatingWindow {
             }
             // visual mode owns the keyboard in the index
             if (!inConv && index.visualMode) {
+                // ⌃d/⌃u stay navigation here too — half-page moves the cursor,
+                // which extends the visual range (vim parity). Must run before
+                // the letter switch, or ⌃d falls into the d=trash case.
+                if (ctrl && (e.key === Qt.Key_D || e.key === Qt.Key_U)) {
+                    index.page(e.key === Qt.Key_D ? 1 : -1)
+                    e.accepted = true; return
+                }
                 switch (e.key) {
                 case Qt.Key_J: index.move(win.consumeCount()); break
                 case Qt.Key_K: index.move(-win.consumeCount()); break
