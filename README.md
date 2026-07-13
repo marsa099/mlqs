@@ -24,6 +24,45 @@ If you keep your own QsLib at `~/.local/share/qml/QsLib` it takes
 precedence over the vendored copy — that's how the author's live
 design system plugs in.
 
+## Setting up with an agent
+
+The fastest path is handing this README to a coding agent (Claude Code
+or similar) and letting it drive. Paste something like:
+
+> Install and set up mlqs from github:daphen/mlqs by reading its README.
+> I use Gmail personally (me@gmail.com) and Microsoft 365 at work
+> (me@company.com). Do everything scriptable yourself; hand me the
+> browser steps (Google Cloud console, Azure portal, OAuth consents)
+> one at a time and verify each stage before moving on.
+
+Notes for the agent:
+
+- **Install**: `nix profile install github:daphen/mlqs` — the default
+  package is `mlqs-client` (bundles daemon, quickshell, vendored UI kit).
+  Wayland session required.
+- **Config**: `~/.config/mlqs/accounts.json` (examples below). Tokens
+  land in `~/.local/share/mlqs/tokens/`, auto-refresh after first consent.
+- **Human-only steps** — surface these, don't attempt them:
+  1. Google Cloud console: create project, enable **Gmail API** and
+     **Google Calendar API**, create an OAuth *desktop app* client,
+     download the JSON to `~/.config/mlqs/google.json`.
+  2. Azure portal: the app registration in the Outlook section below.
+  3. Each `mlqs auth <name>`: a consent tab opens (URL is also printed —
+     relay it if no browser appears; the loopback listener waits 5 min).
+- **Verify between stages** over the daemon socket
+  (`$XDG_RUNTIME_DIR/mlqs.sock`, newline-JSON):
+  - `{"type":"ping"}` → `{"type":"pong"}` — daemon up
+  - `{"type":"folders","account":"<name>"}` → folder list — auth works
+  - `{"type":"agenda","account":"<name>","text":"7"}` → events — calendar works
+  - Errors arrive as `{"type":"toast","text":...}`: `403 insufficient
+    authentication scopes` → re-run auth; `has not been used in project`
+    → API enablement missing; `not a desktop-app client JSON` → wrong
+    Google download type; Azure admin-approval screen → org tenant
+    policy blocks unverified apps.
+- **Launch**: `mlqs-client`. Window title is `mail-client` (WM rules
+  key off it). The daemon keeps running when the window closes —
+  notifications and deep-links stay live.
+
 ## Two accounts, two vendors (typical setup)
 
 Personal Gmail + work Microsoft 365 in one client:
