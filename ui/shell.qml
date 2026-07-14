@@ -105,8 +105,6 @@ FloatingWindow {
     CheatSheet {
         id: cheatSheet
         z: 100
-        // hand the keyboard back to the shell when it closes
-        onShownChanged: if (!shown) keys.forceActiveFocus()
     }
 
     FeedbackPill {
@@ -313,8 +311,23 @@ FloatingWindow {
             const ctrl = e.modifiers & Qt.ControlModifier
             const inConv = Backend.openConvId !== ""
 
-            // ? opens the reference; once open it grabs its own keyboard focus
-            // (for / search) and handles esc/?/close itself — see CheatSheet.qml.
+            // Cheat sheet: driven entirely from here (the shell keeps keyboard
+            // focus — handing it to the overlay proved unreliable). esc closes
+            // (or clears the filter first), / starts filtering, typing edits it.
+            if (cheatSheet.shown) {
+                if (e.key === Qt.Key_Escape) {
+                    if (cheatSheet.searching || cheatSheet.query) cheatSheet.resetSearch()
+                    else cheatSheet.shown = false
+                } else if (e.key === Qt.Key_Slash && !cheatSheet.searching) {
+                    cheatSheet.searching = true
+                } else if (e.key === Qt.Key_Question && !cheatSheet.searching) {
+                    cheatSheet.shown = false
+                } else if (cheatSheet.searching) {
+                    if (e.key === Qt.Key_Backspace) cheatSheet.query = cheatSheet.query.slice(0, -1)
+                    else if (e.text && e.text.length === 1 && e.text.charCodeAt(0) >= 0x20) cheatSheet.query += e.text
+                }
+                e.accepted = true; return
+            }
             if (e.key === Qt.Key_Question) {
                 cheatSheet.shown = true; e.accepted = true; return
             }

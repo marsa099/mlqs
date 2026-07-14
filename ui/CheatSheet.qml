@@ -13,14 +13,10 @@ Item {
     property string query: ""
     property bool searching: false
 
-    // explicit searchField ref (not bare `text`) so it works from any caller,
-    // incl. arrow-function key handlers where QML doesn't inject object scope
-    function resetSearch() { searching = false; query = ""; searchField.text = "" }
-
-    onShownChanged: {
-        resetSearch()
-        if (shown) keyCatcher.forceActiveFocus()
-    }
+    // Presentational only — shell.qml owns key handling (open/close/filter) and
+    // sets shown/searching/query; the field below just displays `query`.
+    function resetSearch() { searching = false; query = "" }
+    onShownChanged: resetSearch()
 
     // Flat ordered sections: { title, rows: [ [ [keys…], description ] … ] }.
     readonly property var sections: [
@@ -103,23 +99,6 @@ Item {
         MouseArea { anchors.fill: parent; onClicked: root.shown = false }
     }
 
-    Item {
-        id: keyCatcher
-        anchors.fill: parent
-        focus: root.shown
-        Keys.onPressed: e => {
-            if (e.key === Qt.Key_Escape) {
-                if (root.searching || root.query) root.resetSearch()
-                else root.shown = false
-                e.accepted = true
-            } else if (e.key === Qt.Key_Slash && !root.searching) {
-                root.searching = true; searchField.forceActiveFocus(); e.accepted = true
-            } else if (e.key === Qt.Key_Question && !root.searching) {
-                root.shown = false; e.accepted = true
-            }
-        }
-    }
-
     Rectangle {
         id: panel
         anchors.centerIn: parent
@@ -151,37 +130,26 @@ Item {
                     renderType: Text.NativeRendering
                 }
             }
-            // search field: a pill on the right; grows in on `/`
+            // search field: a pill on the right; grows in while filtering, and
+            // stays open as long as there's text (never hide a non-empty filter)
             Rectangle {
+                readonly property bool showField: root.searching || root.query.length > 0
                 anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
-                width: root.searching ? 220 : 0
+                width: showField ? 220 : 0
                 height: 30; radius: 8; clip: true
                 color: Theme.surface1
-                border.width: root.searching ? 1 : 0
+                border.width: showField ? 1 : 0
                 border.color: Theme.hairline
                 visible: width > 1
                 Behavior on width { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
-                TextInput {
-                    id: searchField
+                Text {   // display-only: shell.qml edits root.query
                     anchors.fill: parent; anchors.margins: 8
-                    verticalAlignment: TextInput.AlignVCenter
-                    color: Theme.fg
+                    verticalAlignment: Text.AlignVCenter
+                    text: root.query.length ? root.query : "filter…"
+                    color: root.query.length ? Theme.fg : Theme.fg_muted
                     font.family: Theme.fontFamily; font.pixelSize: 13
-                    clip: true
-                    onTextChanged: root.query = text
-                    Text {
-                        visible: !searchField.text
-                        anchors.fill: parent; verticalAlignment: Text.AlignVCenter
-                        text: "filter…"; color: Theme.fg_muted
-                        font: searchField.font
-                        renderType: Text.NativeRendering
-                    }
-                    Keys.onPressed: e => {
-                        if (e.key === Qt.Key_Escape) {
-                            root.resetSearch()
-                            keyCatcher.forceActiveFocus(); e.accepted = true
-                        }
-                    }
+                    elide: Text.ElideLeft
+                    renderType: Text.NativeRendering
                 }
             }
         }
