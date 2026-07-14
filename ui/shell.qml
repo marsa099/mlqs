@@ -153,10 +153,20 @@ FloatingWindow {
             }
         }
 
+        // Persistent help affordance — stays pinned in the corner even when
+        // the mode-specific hints collapse on a narrow window.
+        KeyCap {
+            id: helpBadge
+            text: "?"
+            anchors.right: parent.right; anchors.rightMargin: 14
+            anchors.verticalCenter: parent.verticalCenter
+            HoverHandler { cursorShape: Qt.PointingHandCursor }
+            TapHandler { onTapped: cheatSheet.shown = true }
+        }
         Row {
             visible: !statusbar.inConv && win.calPane
-            opacity: (statusbar.width - leftStatus.width - implicitWidth - 56) >= 0 ? 1 : 0
-            anchors.right: parent.right; anchors.rightMargin: 14
+            opacity: (statusbar.width - leftStatus.width - implicitWidth - helpBadge.width - 70) >= 0 ? 1 : 0
+            anchors.right: helpBadge.left; anchors.rightMargin: 12
             anchors.verticalCenter: parent.verticalCenter
             spacing: 6
             KeyCap { anchors.verticalCenter: parent.verticalCenter; text: "j" }
@@ -185,8 +195,8 @@ FloatingWindow {
         }
         Row {
             visible: !statusbar.inConv && index.visualMode && !win.calPane
-            opacity: (statusbar.width - leftStatus.width - implicitWidth - 56) >= 0 ? 1 : 0
-            anchors.right: parent.right; anchors.rightMargin: 14
+            opacity: (statusbar.width - leftStatus.width - implicitWidth - helpBadge.width - 70) >= 0 ? 1 : 0
+            anchors.right: helpBadge.left; anchors.rightMargin: 12
             anchors.verticalCenter: parent.verticalCenter
             spacing: 6
             KeyCap { anchors.verticalCenter: parent.verticalCenter; text: "j" }
@@ -210,8 +220,8 @@ FloatingWindow {
         }
         Row {
             visible: !statusbar.inConv && !index.visualMode && !win.calPane
-            opacity: (statusbar.width - leftStatus.width - implicitWidth - 56) >= 0 ? 1 : 0
-            anchors.right: parent.right; anchors.rightMargin: 14
+            opacity: (statusbar.width - leftStatus.width - implicitWidth - helpBadge.width - 70) >= 0 ? 1 : 0
+            anchors.right: helpBadge.left; anchors.rightMargin: 12
             anchors.verticalCenter: parent.verticalCenter
             spacing: 6
             KeyCap { anchors.verticalCenter: parent.verticalCenter; text: "j" }
@@ -249,8 +259,8 @@ FloatingWindow {
         }
         Row {
             visible: statusbar.inConv
-            opacity: (statusbar.width - leftStatus.width - implicitWidth - 56) >= 0 ? 1 : 0
-            anchors.right: parent.right; anchors.rightMargin: 14
+            opacity: (statusbar.width - leftStatus.width - implicitWidth - helpBadge.width - 70) >= 0 ? 1 : 0
+            anchors.right: helpBadge.left; anchors.rightMargin: 12
             anchors.verticalCenter: parent.verticalCenter
             spacing: 6
             KeyCap { anchors.verticalCenter: parent.verticalCenter; text: "j" }
