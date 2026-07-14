@@ -13,8 +13,12 @@ Item {
     property string query: ""
     property bool searching: false
 
+    // explicit searchField ref (not bare `text`) so it works from any caller,
+    // incl. arrow-function key handlers where QML doesn't inject object scope
+    function resetSearch() { searching = false; query = ""; searchField.text = "" }
+
     onShownChanged: {
-        query = ""; searching = false
+        resetSearch()
         if (shown) keyCatcher.forceActiveFocus()
     }
 
@@ -105,7 +109,7 @@ Item {
         focus: root.shown
         Keys.onPressed: e => {
             if (e.key === Qt.Key_Escape) {
-                if (root.searching || root.query) { root.searching = false; root.query = "" }
+                if (root.searching || root.query) root.resetSearch()
                 else root.shown = false
                 e.accepted = true
             } else if (e.key === Qt.Key_Slash && !root.searching) {
@@ -174,17 +178,12 @@ Item {
                     }
                     Keys.onPressed: e => {
                         if (e.key === Qt.Key_Escape) {
-                            root.searching = false; root.query = ""; text = ""
+                            root.resetSearch()
                             keyCatcher.forceActiveFocus(); e.accepted = true
                         }
                     }
                 }
             }
-        }
-        // when search closes, clear the field
-        Connections {
-            target: root
-            function onSearchingChanged() { if (!root.searching) searchField.text = "" }
         }
 
         Row {
