@@ -389,10 +389,16 @@ Singleton {
         return names.slice(0, 2).join(", ") + (names.length > 2 ? " +" + (names.length - 2) : "")
     }
 
+    property bool updateAvailable: false
+    property string updateCurrent: ""
+    property string updateLatest: ""
+
     function onEvent(line) {
         let e
         try { e = JSON.parse(line) } catch (err) { return }
-        if (e.type === "workspaces") {
+        if (e.type === "updateAvailable") {
+            updateCurrent = e.current || ""; updateLatest = e.latest || ""; updateAvailable = true
+        } else if (e.type === "workspaces") {
             workspaces = e.workspaces || []
             if (currentAccount === "" && workspaces.length > 0)
                 selectAccount(workspaces[0].id)

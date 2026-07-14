@@ -15,8 +15,10 @@ import (
 	"encoding/json"
 	"fmt"
 	stdhtml "html"
+	"io"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -61,6 +63,22 @@ type daemon struct {
 	notifMu  sync.Mutex
 	notified map[string]string
 	notifier *notify.Notifier
+
+	updateEvent map[string]any // latest updateAvailable event, replayed to new clients
+	updMu       sync.Mutex
+	updEtag     string
+	updLast     time.Time
+}
+
+// gitRev is injected at build time (ldflags -X main.gitRev=<sha>); empty on
+// source runs, which disables the update check.
+var gitRev string
+
+func shortRev(s string) string {
+	if len(s) > 7 {
+		return s[:7]
+	}
+	return s
 }
 
 func (d *daemon) broadcast(v any) {
@@ -73,6 +91,49 @@ func (d *daemon) broadcast(v any) {
 	defer d.mu.Unlock()
 	for c := range d.conns {
 		c.Write(b)
+	}
+}
+
+// checkUpdate does one update check against the repo's main SHA. ETag-conditional
+// (a 304 is free against GitHub's limit). Detect-only; applying is the host's job
+// (flake bump + rebuild). Safe to call concurrently.
+func (d *daemon) checkUpdate(ctx context.Context) {
+	if gitRev == "" {
+		return
+	}
+	d.updMu.Lock()
+	etag := d.updEtag
+	d.updLast = time.Now()
+	d.updMu.Unlock()
+	req, err := http.NewRequestWithContext(ctx, "GET", "https://api.github.com/repos/daphen/mlqs/commits/main", nil)
+	if err != nil {
+		return
+	}
+	req.Header.Set("User-Agent", "mlqs")
+	req.Header.Set("Accept", "application/vnd.github.sha")
+	if etag != "" {
+		req.Header.Set("If-None-Match", etag)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return // 304 unchanged (ETag hit), or transient error
+	}
+	d.updMu.Lock()
+	d.updEtag = resp.Header.Get("ETag")
+	d.updMu.Unlock()
+	b, _ := io.ReadAll(io.LimitReader(resp.Body, 64))
+	latest := strings.TrimSpace(string(b))
+	if latest != "" && latest != gitRev {
+		ev := map[string]any{"type": "updateAvailable",
+			"current": shortRev(gitRev), "latest": shortRev(latest)}
+		d.updMu.Lock()
+		d.updateEvent = ev
+		d.updMu.Unlock()
+		d.broadcast(ev)
 	}
 }
 
@@ -131,6 +192,20 @@ func (d *daemon) serve(conn net.Conn) {
 	}()
 
 	d.sendTo(conn, d.accountsPayload())
+
+	// replay update-available state to a (re)connecting client, and re-check on
+	// connect (throttled) so restarting the app surfaces a new build immediately
+	// rather than waiting on the warm daemon's next poll
+	d.updMu.Lock()
+	ue := d.updateEvent
+	stale := time.Since(d.updLast) > time.Minute
+	d.updMu.Unlock()
+	if ue != nil {
+		d.sendTo(conn, ue)
+	}
+	if gitRev != "" && stale {
+		go d.checkUpdate(context.Background())
+	}
 
 	sc := bufio.NewScanner(conn)
 	sc.Buffer(make([]byte, 1<<20), 1<<24)
@@ -1034,6 +1109,18 @@ func main() {
 				debuglog.Gen("contact seed %s: %d addresses", name, len(addrs))
 			}(name, p)
 		}
+	}
+
+	// Update check: at start, every 3h, and on each client connect (see serve).
+	if gitRev != "" {
+		go func() {
+			d.checkUpdate(context.Background())
+			t := time.NewTicker(3 * time.Hour)
+			defer t.Stop()
+			for range t.C {
+				d.checkUpdate(context.Background())
+			}
+		}()
 	}
 
 	sock := sockPath()

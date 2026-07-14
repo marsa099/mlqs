@@ -14,6 +14,8 @@
         src = ./.;
         vendorHash = "sha256-cR5w5qdIKJei51Z7t7EHC4N/jNg4g9vYrf/RGJUe0F8=";
         subPackages = [ "." ];
+        # Embed the build's git rev so the daemon can detect newer builds.
+        ldflags = [ "-X main.gitRev=${self.rev or ""}" ];
         postInstall = ''
           mkdir -p $out/share/mlqs
           cp -r ui $out/share/mlqs/ui

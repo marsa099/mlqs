@@ -163,8 +163,18 @@ FloatingWindow {
             HoverHandler { cursorShape: Qt.PointingHandCursor }
             TapHandler { onTapped: cheatSheet.shown = true }
         }
+        // Update banner: detect-only (the host applies via flake bump + rebuild),
+        // takes over the hint slot when a newer build exists.
+        Text { renderType: Text.NativeRendering
+            visible: Backend.updateAvailable
+            anchors.right: helpBadge.left; anchors.rightMargin: 12
+            anchors.verticalCenter: parent.verticalCenter
+            text: "⟳ update available · " + Backend.updateCurrent + " → " + Backend.updateLatest
+            color: Theme.orange
+            font.family: Theme.fontFamily; font.hintingPreference: Font.PreferNoHinting; font.pixelSize: 12
+        }
         Row {
-            visible: !statusbar.inConv && win.calPane
+            visible: !statusbar.inConv && win.calPane && !Backend.updateAvailable
             opacity: (statusbar.width - leftStatus.width - implicitWidth - helpBadge.width - 70) >= 0 ? 1 : 0
             anchors.right: helpBadge.left; anchors.rightMargin: 12
             anchors.verticalCenter: parent.verticalCenter
@@ -194,7 +204,7 @@ FloatingWindow {
             CapLabel { anchors.verticalCenter: parent.verticalCenter; text: "refresh" }
         }
         Row {
-            visible: !statusbar.inConv && index.visualMode && !win.calPane
+            visible: !statusbar.inConv && index.visualMode && !win.calPane && !Backend.updateAvailable
             opacity: (statusbar.width - leftStatus.width - implicitWidth - helpBadge.width - 70) >= 0 ? 1 : 0
             anchors.right: helpBadge.left; anchors.rightMargin: 12
             anchors.verticalCenter: parent.verticalCenter
@@ -219,7 +229,7 @@ FloatingWindow {
             CapLabel { anchors.verticalCenter: parent.verticalCenter; text: "cancel" }
         }
         Row {
-            visible: !statusbar.inConv && !index.visualMode && !win.calPane
+            visible: !statusbar.inConv && !index.visualMode && !win.calPane && !Backend.updateAvailable
             opacity: (statusbar.width - leftStatus.width - implicitWidth - helpBadge.width - 70) >= 0 ? 1 : 0
             anchors.right: helpBadge.left; anchors.rightMargin: 12
             anchors.verticalCenter: parent.verticalCenter
@@ -258,7 +268,7 @@ FloatingWindow {
             CapLabel { anchors.verticalCenter: parent.verticalCenter; text: "search" }
         }
         Row {
-            visible: statusbar.inConv
+            visible: statusbar.inConv && !Backend.updateAvailable
             opacity: (statusbar.width - leftStatus.width - implicitWidth - helpBadge.width - 70) >= 0 ? 1 : 0
             anchors.right: helpBadge.left; anchors.rightMargin: 12
             anchors.verticalCenter: parent.verticalCenter
