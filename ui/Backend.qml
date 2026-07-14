@@ -68,6 +68,9 @@ Singleton {
     function safeWrite(s) { if (sock.connected) sock.write(s) }
     function send(obj) { safeWrite(JSON.stringify(obj) + "\n") }
 
+    // ⌃⇧r: force an update check now; the daemon toasts the result.
+    function checkForUpdates() { toast("Checking for updates…"); send({ type: "checkupdate" }) }
+
     function selectAccount(id) {
         currentAccount = id
         folders = []; convsModel.clear(); messages = []

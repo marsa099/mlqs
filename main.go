@@ -224,6 +224,23 @@ func (d *daemon) serve(conn net.Conn) {
 			d.broadcast(map[string]any{"type": "summon"})
 		case "dismissui":
 			d.broadcast(map[string]any{"type": "dismiss"})
+		case "checkupdate":
+			// ⌃⇧r: force an update check now and toast the result
+			go func(c net.Conn) {
+				if gitRev == "" {
+					d.sendTo(c, map[string]any{"type": "toast", "text": "Dev build — update check unavailable"})
+					return
+				}
+				d.checkUpdate(context.Background())
+				d.updMu.Lock()
+				ue := d.updateEvent
+				d.updMu.Unlock()
+				if ue != nil {
+					d.sendTo(c, map[string]any{"type": "toast", "text": "Update available — restart to apply"})
+				} else {
+					d.sendTo(c, map[string]any{"type": "toast", "text": "Up to date"})
+				}
+			}(conn)
 		case "notifact":
 			// bar history fallback: re-dispatch a notification's action when
 			// its live D-Bus object is gone (cmd.ID = server id, Text = action)

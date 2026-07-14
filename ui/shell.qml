@@ -337,6 +337,10 @@ FloatingWindow {
                 Backend.cycleAccount(e.key === Qt.Key_L ? 1 : -1)
                 e.accepted = true; return
             }
+            // ⌃⇧r: manual update check (daemon toasts the result)
+            if (ctrl && (e.modifiers & Qt.ShiftModifier) && e.key === Qt.Key_R) {
+                Backend.checkForUpdates(); e.accepted = true; return
+            }
             // visual mode owns the keyboard in the index
             if (!inConv && index.visualMode) {
                 // ⌃d/⌃u stay navigation here too — half-page moves the cursor,
