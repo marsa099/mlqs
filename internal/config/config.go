@@ -17,6 +17,10 @@ type Account struct {
 	ClientID        string `json:"client_id,omitempty"`
 	ClientSecret    string `json:"client_secret,omitempty"`
 	CredentialsFile string `json:"credentials_file,omitempty"`
+	// Outlook only: Azure AD authority tenant. Empty → "common" (accepts
+	// work/school and personal accounts). Set to a tenant ID or
+	// "organizations" to pin sign-in to one org and skip consumer routing.
+	Tenant string `json:"tenant,omitempty"`
 }
 
 type Config struct {

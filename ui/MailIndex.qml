@@ -278,14 +278,17 @@ Rectangle {
                     renderType: Text.NativeRendering
                     width: parent.width
                     visible: text !== ""
+                    // single line no matter what the provider sends — embedded
+                    // newlines (Graph bodyPreview) otherwise overflow the row
+                    maximumLineCount: 1
+                    elide: Text.ElideRight
                     // gmail snippets arrive HTML-entity-encoded
-                    text: (row.snippet || "").replace(/&#39;/g, "'").replace(/&quot;/g, '"')
+                    text: (row.snippet || "").replace(/[\n\r]+/g, " ").replace(/&#39;/g, "'").replace(/&quot;/g, '"')
                         .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&")
                     color: row.sel ? Qt.rgba(Theme.bg.r, Theme.bg.g, Theme.bg.b, 0.7) : Theme.fg_muted
                     font.family: Theme.fontFamily
                     font.hintingPreference: Font.PreferNoHinting
                     font.pixelSize: 12
-                    elide: Text.ElideRight
                 }
             }
 

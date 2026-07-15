@@ -52,8 +52,13 @@ func oauthConfig(a config.Account, redirect string) (*oauth2.Config, error) {
 			return nil, fmt.Errorf("account %q: outlook needs client_id (embedded default not registered yet)", a.Name)
 		}
 		return &oauth2.Config{
-			ClientID:    id,
-			Endpoint:    endpoints.Microsoft,
+			ClientID: id,
+			// endpoints.Microsoft is the consumer-only LiveConnect endpoint
+			// (login.live.com), which rejects work/school (Microsoft 365)
+			// accounts with "we couldn't find a Microsoft account". AzureAD
+			// routes both work and personal accounts and issues Graph tokens.
+			// Empty tenant defaults to "common".
+			Endpoint:    endpoints.AzureAD(a.Tenant),
 			RedirectURL: redirect,
 			Scopes: []string{
 				"offline_access",
