@@ -1837,7 +1837,9 @@ Rectangle {
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         width: Theme.radiusCard + 12
-        renderTarget: Canvas.FramebufferObject
+        // default Image target: FramebufferObject rasterizes at logical
+        // resolution, so on fractional-scale outputs (laptop @1.75) the
+        // corner sweep upscaled into an angular hockey-stick kink
         visible: opacity > 0 && frac < 1
         opacity: 0
         Behavior on opacity { NumberAnimation { duration: 180 } }
