@@ -51,23 +51,38 @@
           for _ in $(seq 1 150); do [ -S "$sock" ] && break; sleep 0.1; done
 
           # single-instance UI: a q-dismissed window is hidden (visible=false),
-          # invisible to niri — blind spawns stack silent UI processes. If a
-          # client already runs, summon it through the daemon instead; only a
-          # client whose summon fails (wedged/no socket) is replaced.
-          existing=$(pgrep -f "quickshell.* -p .*share/mlqs/ui" | head -1 || true)
-          if [ -n "$existing" ]; then
-            if printf '{"type":"summonui"}\n' | python3 -c '
-          import socket, sys, os
+          # invisible to the compositor — blind spawns stack silent UI
+          # processes. Summon through the daemon and trust only its ACK:
+          # "clients" counts UIs actually connected to the socket. Zero means
+          # every surviving UI process is a zombie (alive but deaf to the
+          # summon broadcast) — reap them all and cold-start.
+          if printf '{"type":"summonui"}\n' | python3 -c '
+          import json, os, socket, sys
           s = socket.socket(socket.AF_UNIX)
-          s.settimeout(0.5)
+          s.settimeout(1.5)
           s.connect(os.environ["XDG_RUNTIME_DIR"] + "/mlqs.sock")
           s.sendall(sys.stdin.buffer.read())
+          buf = b""
+          while b"summonack" not in buf:
+              d = s.recv(65536)
+              if not d:
+                  sys.exit(1)
+              buf += d
+          for line in buf.splitlines():
+              try:
+                  e = json.loads(line)
+              except ValueError:
+                  continue
+              if e.get("type") == "summonack":
+                  sys.exit(0 if e.get("clients", 0) >= 1 else 1)
+          sys.exit(1)
           ' 2>/dev/null; then
-              exit 0
-            fi
-            kill "$existing" 2>/dev/null || true
-            sleep 0.3
+            exit 0
           fi
+          for pid in $(pgrep -f "quickshell.* -p .*mlqs/ui" || true); do
+            kill "$pid" 2>/dev/null || true
+          done
+          sleep 0.3
           exec qs -p "${daemon}/share/mlqs/ui"
         '';
       };

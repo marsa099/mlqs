@@ -51,7 +51,7 @@ func sockPath() string {
 type daemon struct {
 	cfg       *config.Config
 	db        *cache.DB
-	providers map[string]provider.Provider // keyed by account name
+	providers map[string]provider.Provider         // keyed by account name
 	cals      map[string]provider.CalendarProvider // keyed by account name
 
 	calMu       sync.Mutex
@@ -220,8 +220,15 @@ func (d *daemon) serve(conn net.Conn) {
 		case "ping":
 			d.sendTo(conn, map[string]any{"type": "pong"})
 		case "summonui":
-			// launch script pokes this; a hidden UI remaps itself
+			// launch script pokes this; a hidden UI remaps itself. Ack with
+			// how many OTHER clients heard the summon — zero means every
+			// "running" UI is a zombie (alive but disconnected) and the
+			// launcher must reap and cold-start instead of trusting the poke.
 			d.broadcast(map[string]any{"type": "summon"})
+			d.mu.Lock()
+			n := len(d.conns) - 1
+			d.mu.Unlock()
+			d.sendTo(conn, map[string]any{"type": "summonack", "clients": n})
 		case "dismissui":
 			d.broadcast(map[string]any{"type": "dismiss"})
 		case "checkupdate":
@@ -512,7 +519,7 @@ func (d *daemon) handle(conn net.Conn, cmd command) {
 		if name == "" {
 			name = "attachment"
 		}
-		path := filepath.Join(dir, imgcache.Key(cmd.ID+cmd.Text)[:12]+"-"+filepath.Base(name))
+		path := filepath.Join(dir, imgcache.Key(cmd.ID + cmd.Text)[:12]+"-"+filepath.Base(name))
 		if err := os.WriteFile(path, data, 0o600); err != nil {
 			fail(err)
 			return
@@ -886,7 +893,7 @@ func (d *daemon) prepareForward(ctx context.Context, p provider.Provider, convID
 			if err != nil {
 				return fmt.Errorf("fetching %s: %w", a.Name, err)
 			}
-			path := filepath.Join(dir, imgcache.Key(m.ID+a.ID)[:12]+"-"+filepath.Base(a.Name))
+			path := filepath.Join(dir, imgcache.Key(m.ID + a.ID)[:12]+"-"+filepath.Base(a.Name))
 			if err := os.WriteFile(path, data, 0o600); err != nil {
 				return err
 			}
