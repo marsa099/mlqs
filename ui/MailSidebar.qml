@@ -22,6 +22,9 @@ Rectangle {
         visible: cap !== ""
         small: true; ghost: true
         text: cap
+        // fixed box: single-char caps (I, T, C) otherwise shrink below the
+        // two-char ones and the gutter rhythm falls apart
+        width: 21
         border.color: onInk ? Qt.rgba(Theme.bg.r, Theme.bg.g, Theme.bg.b, 0.35) : Theme.hairline
         textColor: onInk ? Theme.bg : Theme.fg_muted
     }
