@@ -564,6 +564,9 @@ FloatingWindow {
                     else calview.rsvp("declined")
                     break
                 case Qt.Key_S: calview.cycleSpan(); break
+                case Qt.Key_F:
+                    Backend.cycleCalFilter(e.modifiers & Qt.ShiftModifier ? -1 : 1)
+                    break
                 case Qt.Key_R: Backend.refreshAgenda(); break
                 case Qt.Key_Q: win.visible = false; break
                 case Qt.Key_H: win.pane = "sidebar"; break

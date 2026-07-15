@@ -73,7 +73,8 @@ Item {
         ]},
         { title: "Calendar", rows: [
             [["j", "k"], "Move"], [["↵"], "Open event"], [["o"], "Open in browser"],
-            [["y", "m", "n"], "RSVP"], [["⇧n"], "New event"], [["s"], "Cycle span"], [["r"], "Refresh"],
+            [["y", "m", "n"], "RSVP"], [["⇧n"], "New event"], [["s"], "Cycle span"],
+            [["f"], "Filter calendar (⇧f back)"], [["r"], "Refresh"],
         ]},
         { title: "Global", rows: [
             [["⌃d", "⌃u"], "Half-page down / up"], [["⌃h", "⌃l"], "Sidebar / index"],

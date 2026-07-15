@@ -341,6 +341,7 @@ Singleton {
     function selectCalendar() {
         currentFolderId = "__calendar"; currentFolderName = "Calendar"
         openConvId = ""; messages = []
+        calFilter = 0   // fresh entry always shows everything
         refreshAgenda()
     }
     property int agendaDays: 7   // 1 today · 7 week · 31 month
@@ -353,7 +354,25 @@ Singleton {
         _agendaByAccount = {}
         eventsModel.clear()
         loadingAgenda = true
-        for (const w of workspaces) send({ type: "agenda", account: w.id, text: String(agendaDays) })
+        for (const w of workspaces) {
+            send({ type: "agenda", account: w.id, text: String(agendaDays) })
+            send({ type: "calendars", account: w.id })   // names for the filter chips
+        }
+    }
+
+    // calendar filter: 0 = all (default), else 1-based index into calFilterList
+    property int calFilter: 0
+    property var calFilterList: []          // [{key, label}] — calendars present in the agenda
+    property var _calsByAccount: ({})       // account -> [{id, name, primary, …}]
+    function cycleCalFilter(d) {
+        const n = calFilterList.length
+        if (n === 0) return
+        calFilter = (calFilter + (d || 1) + n + 1) % (n + 1)
+        _rebuildAgenda()
+    }
+    function _calLabel(acct, calId) {
+        const c = (_calsByAccount[acct] || []).find(c => c.id === calId)
+        return c && !c.primary ? acct + " · " + c.name : acct
     }
     function _rebuildAgenda() {
         eventsModel.clear()
@@ -361,10 +380,22 @@ Singleton {
         for (const acct in _agendaByAccount)
             for (const ev of _agendaByAccount[acct]) all.push(Object.assign({ account: acct }, ev))
         all.sort((a, b) => new Date(a.start) - new Date(b.start))
+        // filter chips: the distinct calendars actually present in this agenda
+        const fseen = {}, flist = []
+        for (const ev of all) {
+            const k = ev.account + "|" + ev.calId
+            if (!fseen[k]) { fseen[k] = true; flist.push({ key: k, label: _calLabel(ev.account, ev.calId) }) }
+        }
+        flist.sort((a, b) => a.label.localeCompare(b.label))
+        calFilterList = flist
+        if (calFilter > flist.length) calFilter = 0
+        const act = calFilter > 0 ? flist[calFilter - 1].key : ""
         // the same event often exists on both accounts' calendars — collapse,
-        // preferring the copy that carries my RSVP status
+        // preferring the copy that carries my RSVP status. Filter first, so
+        // picking a calendar shows ITS copy of a cross-account event.
         const seen = {}, out = []
         for (const ev of all) {
+            if (act && ev.account + "|" + ev.calId !== act) continue
             const k = (ev.iCalUid || ev.id) + "|" + ev.start
             if (seen[k] === undefined) { seen[k] = out.length; out.push(ev) }
             else if (!out[seen[k]].myStatus && ev.myStatus) out[seen[k]] = ev
@@ -565,6 +596,11 @@ Singleton {
             if (currentFolderId === "__calendar") _rebuildAgenda()
         } else if (e.type === "calendars") {
             if (e.account === currentAccount) accountCalendars = e.calendars || []
+            const cm = Object.assign({}, _calsByAccount)
+            cm[e.account] = e.calendars || []
+            _calsByAccount = cm
+            // names arriving after the agenda upgrade the filter-chip labels
+            if (currentFolderId === "__calendar") _rebuildAgenda()
         } else if (e.type === "rsvped") {
             toast("rsvp saved" + (e.status ? ": " + e.status : ""))
         } else if (e.type === "eventcreated") {
