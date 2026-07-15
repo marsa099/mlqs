@@ -650,6 +650,10 @@ Rectangle {
         let li = 0
         for (let i = 0; i < lineRects.length; i++)
             if (lineRects[i].y <= targetY) li = i
+        // a line taller than half the viewport (hero image) contains the
+        // target itself — force at least one line of progress or ⌃d sticks
+        if (li === curLine)
+            li = Math.max(0, Math.min(lineRects.length - 1, curLine + (d > 0 ? 1 : -1)))
         _setCursor(g.positionAt(vColX, lineRects[li].y + lineRects[li].h / 2), true)
     }
     // view scroll, cursor stays put — vim ctrl-e/y
