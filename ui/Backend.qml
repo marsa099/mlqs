@@ -362,12 +362,35 @@ Singleton {
 
     // calendar filter: 0 = all (default), else 1-based index into calFilterList
     property int calFilter: 0
-    property var calFilterList: []          // [{key, label}] — calendars present in the agenda
+    property var calFilterList: []          // [{key, label, hidden}] — calendars present in the agenda
     property var _calsByAccount: ({})       // account -> [{id, name, primary, …}]
     function cycleCalFilter(d) {
         const n = calFilterList.length
         if (n === 0) return
         calFilter = (calFilter + (d || 1) + n + 1) % (n + 1)
+        _rebuildAgenda()
+    }
+
+    // locally hidden calendars (auto-subscribed week-number/holiday feeds):
+    // dropped from the merged agenda, still cyclable so x can unhide them.
+    // Persisted in the cache dir — the daemon already guarantees it exists.
+    property var hiddenCals: ({})
+    FileView {
+        id: hiddenCalStore
+        path: Quickshell.env("HOME") + "/.cache/mlqs/hidden-cals.json"
+        onLoaded: {
+            try { backend.hiddenCals = JSON.parse(text()) } catch (e) { return }
+            if (backend.currentFolderId === "__calendar") backend._rebuildAgenda()
+        }
+    }
+    function toggleHideCal() {
+        if (calFilter <= 0 || calFilter > calFilterList.length) return
+        const f = calFilterList[calFilter - 1]
+        const h = Object.assign({}, hiddenCals)
+        if (h[f.key]) delete h[f.key]; else h[f.key] = true
+        hiddenCals = h
+        hiddenCalStore.setText(JSON.stringify(h))
+        toast((h[f.key] ? "hidden: " : "shown: ") + f.label)
         _rebuildAgenda()
     }
     function _calLabel(acct, calId) {
@@ -384,7 +407,10 @@ Singleton {
         const fseen = {}, flist = []
         for (const ev of all) {
             const k = ev.account + "|" + ev.calId
-            if (!fseen[k]) { fseen[k] = true; flist.push({ key: k, label: _calLabel(ev.account, ev.calId) }) }
+            if (!fseen[k]) {
+                fseen[k] = true
+                flist.push({ key: k, label: _calLabel(ev.account, ev.calId), hidden: !!hiddenCals[k] })
+            }
         }
         flist.sort((a, b) => a.label.localeCompare(b.label))
         calFilterList = flist
@@ -395,7 +421,9 @@ Singleton {
         // picking a calendar shows ITS copy of a cross-account event.
         const seen = {}, out = []
         for (const ev of all) {
-            if (act && ev.account + "|" + ev.calId !== act) continue
+            const ck = ev.account + "|" + ev.calId
+            // "all" drops hidden calendars; a direct filter still shows them
+            if (act ? ck !== act : hiddenCals[ck]) continue
             const k = (ev.iCalUid || ev.id) + "|" + ev.start
             if (seen[k] === undefined) { seen[k] = out.length; out.push(ev) }
             else if (!out[seen[k]].myStatus && ev.myStatus) out[seen[k]] = ev

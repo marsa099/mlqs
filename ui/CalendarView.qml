@@ -83,27 +83,39 @@ Rectangle {
                 }
             }
         }
-        // calendar filter: f cycles all → each calendar present in the agenda
+        // calendar filter: ⇥ cycles all → each calendar present in the agenda;
+        // x hides/unhides the filtered one
         Rectangle {
             visible: Backend.calFilterList.length > 1
             anchors.right: parent.right; anchors.rightMargin: 14
             anchors.verticalCenter: parent.verticalCenter
             height: 26; radius: 13
-            width: filterLbl.implicitWidth + 22
+            width: filterRow.implicitWidth + 22
             color: Backend.calFilter > 0 ? Qt.rgba(Theme.fg.r, Theme.fg.g, Theme.fg.b, 0.10)
                  : filterHov.hovered ? Theme.hover : "transparent"
             border.width: 1
             border.color: Backend.calFilter > 0 ? Theme.hairline : "transparent"
             HoverHandler { id: filterHov }
-            Text {
-                id: filterLbl
-                renderType: Text.NativeRendering
+            Row {
+                id: filterRow
                 anchors.centerIn: parent
-                text: Backend.calFilter > 0
-                    ? Backend.calFilterList[Backend.calFilter - 1].label : "all calendars"
-                color: Backend.calFilter > 0 ? Theme.fg : Theme.dimmedFg
-                font.family: Theme.fontFamily; font.hintingPreference: Font.PreferNoHinting
-                font.pixelSize: 12; font.weight: Backend.calFilter > 0 ? 500 : 400
+                spacing: 7
+                KeyCap {
+                    small: true; ghost: true; text: "⇥"
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+                Text {
+                    renderType: Text.NativeRendering
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: {
+                        if (Backend.calFilter <= 0) return "all calendars"
+                        const f = Backend.calFilterList[Backend.calFilter - 1]
+                        return f.label + (f.hidden ? " · hidden (x shows)" : "")
+                    }
+                    color: Backend.calFilter > 0 ? Theme.fg : Theme.dimmedFg
+                    font.family: Theme.fontFamily; font.hintingPreference: Font.PreferNoHinting
+                    font.pixelSize: 12; font.weight: Backend.calFilter > 0 ? 500 : 400
+                }
             }
             TapHandler { onTapped: Backend.cycleCalFilter(1) }
         }
