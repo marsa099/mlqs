@@ -676,15 +676,15 @@ func (t apiCalTime) parse() time.Time {
 }
 
 type apiEvent struct {
-	ID             string     `json:"id"`
-	Subject        string     `json:"subject"`
-	Start          apiCalTime `json:"start"`
-	End            apiCalTime `json:"end"`
-	IsAllDay       bool       `json:"isAllDay"`
-	IsCancelled    bool       `json:"isCancelled"`
-	WebLink        string     `json:"webLink"`
-	ICalUID        string     `json:"iCalUId"`
-	OnlineMeeting  *struct {
+	ID            string     `json:"id"`
+	Subject       string     `json:"subject"`
+	Start         apiCalTime `json:"start"`
+	End           apiCalTime `json:"end"`
+	IsAllDay      bool       `json:"isAllDay"`
+	IsCancelled   bool       `json:"isCancelled"`
+	WebLink       string     `json:"webLink"`
+	ICalUID       string     `json:"iCalUId"`
+	OnlineMeeting *struct {
 		JoinURL string `json:"joinUrl"`
 	} `json:"onlineMeeting"`
 	OnlineMeetingURL string `json:"onlineMeetingUrl"`

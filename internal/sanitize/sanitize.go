@@ -16,8 +16,8 @@ import (
 )
 
 var (
-	reEmptyA     = regexp.MustCompile(`(?i)<a[^>]*>(\s|&nbsp;|\x{00a0}|<br\s*/?>)*</a>`)
-	reUnderline  = regexp.MustCompile(`(?i)</?u>`)
+	reEmptyA    = regexp.MustCompile(`(?i)<a[^>]*>(\s|&nbsp;|\x{00a0}|<br\s*/?>)*</a>`)
+	reUnderline = regexp.MustCompile(`(?i)</?u>`)
 	// (\s[^>]*)? not [^>]*: a bare [^>]* lets "i" swallow <img> and "b" <br>,
 	// scrubbing every sized inline image as an "empty block"
 	reEmptyBlock = regexp.MustCompile(`(?i)<(div|p|span|b|i|h3)(\s[^>]*)?>(\s|&nbsp;|\x{00a0}|<br\s*/?>)*</(div|p|span|b|i|h3)>`)
