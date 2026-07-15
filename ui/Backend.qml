@@ -378,6 +378,8 @@ Singleton {
     FileView {
         id: hiddenCalStore
         path: Quickshell.env("HOME") + "/.cache/mlqs/hidden-cals.json"
+        watchChanges: true
+        onFileChanged: reload()
         onLoaded: {
             try { backend.hiddenCals = JSON.parse(text()) } catch (e) { return }
             if (backend.currentFolderId === "__calendar") backend._rebuildAgenda()
