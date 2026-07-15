@@ -536,6 +536,14 @@ FloatingWindow {
                 }
             }
 
+            // shifted goto — ⇧I inbox · ⇧T threads · ⇧C calendar. Top-level
+            // jumps from anywhere outside a text field; g-prefix still works.
+            if ((e.modifiers & Qt.ShiftModifier) && !ctrl) {
+                if (e.key === Qt.Key_I) { Backend.jumpRole("inbox"); win.pane = "index"; e.accepted = true; return }
+                if (e.key === Qt.Key_T) { Backend.selectThreads(); win.pane = "index"; e.accepted = true; return }
+                if (e.key === Qt.Key_C) { Backend.selectCalendar(); win.pane = "index"; e.accepted = true; return }
+            }
+
             // calendar pane owns the right panel's keys
             if (win.calPane && !inConv && win.pane === "index" && !ctrl) {
                 switch (e.key) {

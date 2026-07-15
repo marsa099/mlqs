@@ -32,6 +32,7 @@ Item {
             [["n"], "Compose"], [["/"], "Search"], [["q"], "Hide window"],
         ]},
         { title: "Go to", rows: [
+            [["⇧i"], "Inbox"], [["⇧t"], "Threads"], [["⇧c"], "Calendar"],
             [["g", "i"], "Inbox"], [["g", "⇧i"], "Starred"], [["g", "s"], "Sent"],
             [["g", "⇧s"], "Spam"], [["g", "d"], "Drafts"], [["g", "t"], "Threads"],
             [["g", "⇧t"], "Trash"], [["g", "c"], "Calendar"],
