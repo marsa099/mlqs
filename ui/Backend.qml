@@ -403,15 +403,20 @@ Singleton {
         for (const acct in _agendaByAccount)
             for (const ev of _agendaByAccount[acct]) all.push(Object.assign({ account: acct }, ev))
         all.sort((a, b) => new Date(a.start) - new Date(b.start))
-        // filter chips: the distinct calendars actually present in this agenda
+        // filter chips: every subscribed calendar — not just those with events
+        // in the loaded span, else sparse calendars silently vanish from the
+        // cycle and can't be inspected or unhidden. Events whose calendar the
+        // list doesn't know yet (reply still in flight) are unioned in.
         const fseen = {}, flist = []
-        for (const ev of all) {
-            const k = ev.account + "|" + ev.calId
-            if (!fseen[k]) {
-                fseen[k] = true
-                flist.push({ key: k, label: _calLabel(ev.account, ev.calId), hidden: !!hiddenCals[k] })
-            }
+        const addChip = (acct, calId) => {
+            const k = acct + "|" + calId
+            if (fseen[k]) return
+            fseen[k] = true
+            flist.push({ key: k, label: _calLabel(acct, calId), hidden: !!hiddenCals[k] })
         }
+        for (const acct in _calsByAccount)
+            for (const c of _calsByAccount[acct]) addChip(acct, c.id)
+        for (const ev of all) addChip(ev.account, ev.calId)
         flist.sort((a, b) => a.label.localeCompare(b.label))
         calFilterList = flist
         if (calFilter > flist.length) calFilter = 0
