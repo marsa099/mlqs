@@ -199,6 +199,7 @@ Rectangle {
     property var hintKinds: []
     property var hintInners: []
     property var hintImgTargets: []
+    property var _hintRawSkip: []
 
     readonly property var _hintRe: /<a\s[^>]*href="([^"]+)"[^>]*>|<img\s[^>]*src="(file:[^"]+)"[^>]*\/?>/gi
 
@@ -215,12 +216,13 @@ Rectangle {
         return '\u200B<span style="color:transparent;">&#8201;' + label + '&#8201;&nbsp;</span>'
     }
     function _renderHints() {
-        let i = 0
+        let raw = 0, kept = 0
         _hintRe.lastIndex = 0
         hintedHtml = hintBaseHtml.replace(_hintRe, tag => {
-            const idx = i++
-            if ((hintKinds[idx] || "link") !== "link") return tag
-            return _reserved(hintLabels[hintAttCount + idx]) + tag
+            if (_hintRawSkip[raw++]) return tag
+            const k = kept++
+            if ((hintKinds[k] || "link") !== "link") return tag
+            return _reserved(hintLabels[hintAttCount + k]) + tag
         })
     }
     property int _hintResumePos: -1
@@ -273,6 +275,7 @@ Rectangle {
         hintAtts = atts; hintAttCount = atts.length; hintMsgId = m.id
         hintTargets = urls; hintLabels = labels; hintKinds = kinds; hintInners = inners
         hintImgTargets = imgTargets
+        _hintRawSkip = rawSkip
         hintBaseHtml = html.replace(/\u200B/g, "")
         hintRects = []
         hintIndex = list.currentIndex; hintBuf = ""
@@ -785,7 +788,9 @@ Rectangle {
         let im, iOrd = 0
         while ((im = iRe.exec(base)) !== null) {
             const srcm = /src="([^"]+)"/i.exec(im[0])
-            if (srcm) placed.push({ copy: srcm[1], at: im.index, img: true, ord: iOrd })
+            const wm = /width="?(\d+)/i.exec(im[0])
+            const tiny = wm && parseInt(wm[1]) < 48
+            if (srcm && !tiny) placed.push({ copy: srcm[1], at: im.index, img: true, ord: iOrd })
             iOrd++
         }
         placed.sort((a, b) => a.at - b.at)
@@ -1241,6 +1246,7 @@ Rectangle {
                             const ipos = imgPos[ti]
                             const ir = geom.positionToRectangle(ipos)
                             const iw = cv._objWidth(geom, ipos, ti, widths)
+                            const tiny = iw < 48 || ir.height < 22
                             stack = (ipos === lastImg) ? stack + 1 : 0
                             lastImg = ipos
                             let ring = null
@@ -1258,11 +1264,11 @@ Rectangle {
                                 }
                                 ring = { x: rx - 4, y: ry - 4, w: rw + 8, h: rb - ry + 8 }
                             }
-                            // tiny images drown under corner caps — hang the
-                            // caps off their right edge instead
                             const inside = iw >= 140 && ir.height >= 48
-                            rects.push({ x: inside ? ir.x + 6 + stack * 52 : ir.x + iw + 8 + stack * 52,
-                                         y: inside ? ir.y + 6 : ir.y + (ir.height - 18) / 2,
+                            rects.push({ x: tiny ? ir.x
+                                            : inside ? ir.x + 6 + stack * 52 : ir.x + iw + 8 + stack * 52,
+                                         y: tiny ? ir.y + (ir.height - 18) / 2
+                                            : inside ? ir.y + 6 : ir.y + (ir.height - 18) / 2,
                                          w: 30, h: 18, label: lab, kind: kind, ring: ring })
                         }
                         cv.hintRects = rects
