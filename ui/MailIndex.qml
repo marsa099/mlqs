@@ -289,7 +289,6 @@ Rectangle {
                     font.family: Theme.fontFamily
                     font.hintingPreference: Font.PreferNoHinting
                     font.pixelSize: 12
-                    elide: Text.ElideRight
                 }
             }
 
