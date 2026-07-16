@@ -87,12 +87,16 @@ Rectangle {
     }
     signal exitInsert()
     signal mailtoRequested(string addr)
+    signal hideRequested()
     function openLink(link) {
         if (link.indexOf("mailto:") === 0) {
             mailtoRequested(decodeURIComponent(link.slice(7).split("?")[0]))
             return
         }
         Qt.openUrlExternally(link)
+        // opening a link sends you to the browser — hide the mail window
+        // (warm, like q) so it's out of the way behind it
+        hideRequested()
     }
     readonly property bool replyHasFocus: replyInput.activeFocus
 

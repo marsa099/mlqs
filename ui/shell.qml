@@ -93,6 +93,7 @@ FloatingWindow {
                 visible: Backend.openConvId !== ""
                 onExitInsert: keys.forceActiveFocus()
                 onMailtoRequested: addr => composer.composeTo(addr)
+                onHideRequested: win.hideWarm()
             }
         }
     }
