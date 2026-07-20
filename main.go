@@ -1091,7 +1091,9 @@ func main() {
 			return
 		}
 		if k.Cal != "" {
-			if k.Link != "" {
+			// Join only on an explicit click/join — "read" is the picker's
+			// mark-read/dismiss key and must never launch the meeting.
+			if action != "read" && k.Link != "" {
 				exec.Command("xdg-open", k.Link).Start()
 			}
 			return
