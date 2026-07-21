@@ -65,7 +65,6 @@ Rectangle {
         anchors { top: parent.top; left: parent.left; right: parent.right }
         height: 52; color: "transparent"
         Text {
-            renderType: Text.NativeRendering
             anchors.left: parent.left; anchors.leftMargin: 14
             anchors.verticalCenter: parent.verticalCenter
             text: (Backend.currentFolderName.charAt(0) + Backend.currentFolderName.slice(1).toLowerCase())
@@ -116,7 +115,6 @@ Rectangle {
                 color: Theme.mode === "light" ? Theme.bg : Theme.surface2
                 border.width: 1; border.color: Theme.hairline
                 Text {
-                    renderType: Text.NativeRendering
                     anchors.centerIn: parent
                     text: "/"
                     color: Theme.fg
@@ -197,7 +195,6 @@ Rectangle {
                 anchors.left: parent.left; anchors.leftMargin: 4
                 visible: idx.active
                 Text {
-                    renderType: Text.NativeRendering
                     visible: !cursor
                     anchors.right: parent.right; anchors.rightMargin: 2
                     anchors.verticalCenter: parent.verticalCenter
@@ -245,7 +242,6 @@ Rectangle {
 
             Text {
                 id: whoText
-                renderType: Text.NativeRendering
                 anchors.left: parent.left; anchors.leftMargin: idx.active ? 112 : 84
                 anchors.verticalCenter: parent.verticalCenter
                 width: 210
@@ -264,7 +260,6 @@ Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: 3
                 Text {
-                    renderType: Text.NativeRendering
                     width: parent.width
                     text: row.subject || "(no subject)"
                     color: row.sel ? Theme.bg : row.unread ? Theme.fg : Theme.fg_secondary
@@ -275,7 +270,6 @@ Rectangle {
                     elide: Text.ElideRight
                 }
                 Text {
-                    renderType: Text.NativeRendering
                     width: parent.width
                     visible: text !== ""
                     // single line no matter what the provider sends — embedded
@@ -294,7 +288,6 @@ Rectangle {
 
             Text {
                 id: when
-                renderType: Text.NativeRendering
                 anchors.right: parent.right; anchors.rightMargin: 30
                 anchors.verticalCenter: parent.verticalCenter
                 text: row.dateStr
@@ -310,7 +303,6 @@ Rectangle {
     }
 
     Text {
-        renderType: Text.NativeRendering
         anchors.centerIn: parent
         visible: list.count === 0 && !Backend.loadingConvs
         text: "empty"

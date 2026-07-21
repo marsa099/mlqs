@@ -147,7 +147,6 @@ Rectangle {
             anchors.fill: parent; anchors.leftMargin: 10
             spacing: 8
             Text {
-                renderType: Text.NativeRendering
                 text: label; color: Theme.fg_muted
                 width: 66
                 font.family: Theme.fontFamily; font.pixelSize: 12
@@ -175,7 +174,6 @@ Rectangle {
         spacing: 8
 
         Text {
-            renderType: Text.NativeRendering
             text: "New event · " + Backend.currentAccount
             color: Theme.fg
             font.family: Theme.fontFamily; font.pixelSize: 14; font.weight: 600
@@ -199,14 +197,12 @@ Rectangle {
                 anchors.fill: parent; anchors.leftMargin: 10
                 spacing: 8
                 Text {
-                    renderType: Text.NativeRendering
                     text: "Calendar"; color: Theme.fg_muted
                     width: 66
                     font.family: Theme.fontFamily; font.pixelSize: 12
                     anchors.verticalCenter: parent.verticalCenter
                 }
                 Text {
-                    renderType: Text.NativeRendering
                     anchors.verticalCenter: parent.verticalCenter
                     text: comp.curCal ? (comp.curCal.primary ? Backend.currentAccount + " (primary)" : comp.curCal.name)
                                         + (comp.curCalWritable ? "" : "  · read-only") : "primary"
@@ -214,7 +210,6 @@ Rectangle {
                     font.family: Theme.fontFamily; font.pixelSize: 13
                 }
                 Text {
-                    renderType: Text.NativeRendering
                     anchors.verticalCenter: parent.verticalCenter
                     visible: comp.cals.length > 1
                     text: "↵ cycles"
@@ -241,7 +236,6 @@ Rectangle {
                 TapHandler { onTapped: comp.meet = !comp.meet }
             }
             Text {
-                renderType: Text.NativeRendering
                 anchors.verticalCenter: parent.verticalCenter
                 text: "Google Meet (when inviting)  ·  m toggles"
                 color: Theme.fg_muted
@@ -275,10 +269,10 @@ Rectangle {
                     border.color: index === comp.acSel ? Theme.hairline : "transparent"
                     Row {
                         anchors.fill: parent; anchors.leftMargin: 10; spacing: 8
-                        Text { renderType: Text.NativeRendering; anchors.verticalCenter: parent.verticalCenter
+                        Text { anchors.verticalCenter: parent.verticalCenter
                                text: modelData.name || modelData.email; color: Theme.fg
                                font.family: Theme.fontFamily; font.pixelSize: 13 }
-                        Text { renderType: Text.NativeRendering; anchors.verticalCenter: parent.verticalCenter
+                        Text { anchors.verticalCenter: parent.verticalCenter
                                visible: !!modelData.name
                                text: modelData.email; color: Theme.fg_muted
                                font.family: Theme.fontFamily; font.pixelSize: 11 }
@@ -329,12 +323,11 @@ Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
                 color: Theme.mode === "light" ? Theme.bg : Theme.surface2
                 border.width: 1; border.color: Theme.hairline
-                Text { id: t; renderType: Text.NativeRendering; anchors.centerIn: parent
+                Text { id: t; anchors.centerIn: parent
                        color: Qt.tint(Theme.fg_muted, Qt.rgba(Theme.fg.r, Theme.fg.g, Theme.fg.b, 0.55))
                        font.family: Theme.fontFamily; font.pixelSize: 11; font.weight: 500 }
             }
             component CLbl: Text {
-                renderType: Text.NativeRendering
                 anchors.verticalCenter: parent.verticalCenter
                 color: Qt.tint(Theme.fg_muted, Qt.rgba(Theme.fg.r, Theme.fg.g, Theme.fg.b, 0.55))
                 font.family: Theme.fontFamily; font.pixelSize: 11

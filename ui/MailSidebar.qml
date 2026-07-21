@@ -99,7 +99,6 @@ Rectangle {
                     HoverHandler { id: tabHov }
                     Text {
                         id: tabLbl
-                        renderType: Text.NativeRendering
                         anchors.centerIn: parent
                         text: modelData.name
                         color: activeTab ? Theme.fg : Theme.dimmedFg
@@ -117,7 +116,6 @@ Rectangle {
                         radius: 8; color: Theme.cursor
                         Text {
                             id: tabBadge
-                            renderType: Text.NativeRendering
                             anchors.centerIn: parent
                             text: tabUnread > 99 ? "99+" : tabUnread
                             color: Theme.ink
@@ -171,7 +169,6 @@ Rectangle {
                      : (threadsRow.isOpen || bar.sel === -2) ? Theme.fg : Theme.fg_muted
             }
             Text {
-                renderType: Text.NativeRendering
                 anchors.verticalCenter: parent.verticalCenter
                 text: "Threads"
                 color: threadsRow.primary ? Theme.bg
@@ -225,7 +222,6 @@ Rectangle {
                      : (calRow.isOpen || bar.sel === -1) ? Theme.fg : Theme.fg_muted
             }
             Text {
-                renderType: Text.NativeRendering
                 anchors.verticalCenter: parent.verticalCenter
                 text: "Calendar"
                 color: calRow.primary ? Theme.bg
@@ -253,7 +249,6 @@ Rectangle {
             width: list.width
             height: 34
             Text {
-                renderType: Text.NativeRendering
                 anchors.left: parent.left; anchors.leftMargin: 12
                 anchors.bottom: parent.bottom; anchors.bottomMargin: 8
                 text: section.toUpperCase() + (section === "labels" ? "  ▾" : "")
@@ -273,7 +268,6 @@ Rectangle {
             width: list.width
             height: bar.labelsCollapsed ? 34 : 0
             Text {
-                renderType: Text.NativeRendering
                 anchors.left: parent.left; anchors.leftMargin: 12
                 anchors.bottom: parent.bottom; anchors.bottomMargin: 8
                 text: {
@@ -342,7 +336,6 @@ Rectangle {
                          : (row.emphasize || row.isOpen || row.cursor) ? Theme.fg : Theme.fg_muted
                 }
                 Text {
-                    renderType: Text.NativeRendering
                     anchors.verticalCenter: parent.verticalCenter
                     width: parent.width - glyph.width - parent.spacing
                     text: modelData.role === "label" ? modelData.name
@@ -364,7 +357,7 @@ Rectangle {
                 height: 18; width: Math.max(18, ub.implicitWidth + 10); radius: 9
                 color: Theme.cursor
                 Text {
-                    id: ub; renderType: Text.NativeRendering; anchors.fill: parent
+                    id: ub; anchors.fill: parent
                     horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
                     text: modelData.unread > 9999 ? "9999+" : modelData.unread
                     color: Theme.ink
@@ -374,7 +367,6 @@ Rectangle {
             }
             // quiet: bare muted count
             Text {
-                renderType: Text.NativeRendering
                 visible: modelData.unread > 0 && !row.loudUnread
                 anchors.right: parent.right; anchors.rightMargin: 22
                 anchors.verticalCenter: parent.verticalCenter

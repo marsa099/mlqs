@@ -153,13 +153,11 @@ Item {
                     text: "Keyboard shortcuts"
                     color: Theme.fg
                     font.family: Theme.fontFamily; font.pixelSize: 18; font.weight: 600
-                    renderType: Text.NativeRendering
                 }
                 Text {
                     text: root.searching ? "type to filter · esc to clear" : "/ to search · esc or ? to close"
                     color: Theme.fg_muted
                     font.family: Theme.fontFamily; font.pixelSize: 12
-                    renderType: Text.NativeRendering
                 }
             }
             // search field: a pill on the right; grows in while filtering, and
@@ -181,7 +179,6 @@ Item {
                     color: root.query.length ? Theme.fg : Theme.fg_muted
                     font.family: Theme.fontFamily; font.pixelSize: 13
                     elide: Text.ElideLeft
-                    renderType: Text.NativeRendering
                 }
             }
         }
@@ -212,7 +209,6 @@ Item {
                                 font.family: Theme.fontFamily; font.pixelSize: 11
                                 font.weight: 600; font.capitalization: Font.AllUppercase
                                 font.letterSpacing: 1.2
-                                renderType: Text.NativeRendering
                             }
                             Repeater {
                                 model: modelData.rows
@@ -240,7 +236,6 @@ Item {
                                         color: Theme.fg
                                         elide: Text.ElideRight
                                         font.family: Theme.fontFamily; font.pixelSize: 13
-                                        renderType: Text.NativeRendering
                                     }
                                 }
                             }
@@ -255,7 +250,6 @@ Item {
                 text: "no shortcuts match “" + root.query + "”"
                 color: Theme.fg_muted
                 font.family: Theme.fontFamily; font.pixelSize: 13
-                renderType: Text.NativeRendering
             }
         }
     }

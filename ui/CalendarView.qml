@@ -45,7 +45,6 @@ Rectangle {
         anchors { top: parent.top; left: parent.left; right: parent.right }
         height: 52; color: "transparent"
         Text {
-            renderType: Text.NativeRendering
             anchors.left: parent.left; anchors.leftMargin: 14
             anchors.verticalCenter: parent.verticalCenter
             text: "Calendar" + (Backend.loadingAgenda ? "  · loading…" : "")
@@ -72,7 +71,6 @@ Rectangle {
                     HoverHandler { id: spanHov }
                     Text {
                         id: spanLbl
-                        renderType: Text.NativeRendering
                         anchors.centerIn: parent
                         text: modelData.label
                         color: on ? Theme.fg : Theme.dimmedFg
@@ -105,7 +103,6 @@ Rectangle {
                     anchors.verticalCenter: parent.verticalCenter
                 }
                 Text {
-                    renderType: Text.NativeRendering
                     anchors.verticalCenter: parent.verticalCenter
                     text: {
                         if (Backend.calFilter <= 0) return "all calendars"
@@ -145,7 +142,6 @@ Rectangle {
             required property string section
             width: list.width; height: 40
             Text {
-                renderType: Text.NativeRendering
                 anchors.left: parent.left; anchors.leftMargin: 40
                 anchors.bottom: parent.bottom; anchors.bottomMargin: 8
                 text: section.toUpperCase()
@@ -188,7 +184,6 @@ Rectangle {
                 anchors.left: parent.left; anchors.leftMargin: 4
                 visible: cal.active
                 Text {
-                    renderType: Text.NativeRendering
                     visible: !cursor
                     anchors.right: parent.right; anchors.rightMargin: 2
                     anchors.verticalCenter: parent.verticalCenter
@@ -221,7 +216,6 @@ Rectangle {
 
             Text {
                 id: timeText
-                renderType: Text.NativeRendering
                 anchors.left: parent.left; anchors.leftMargin: cal.active ? 78 : 50
                 anchors.verticalCenter: parent.verticalCenter
                 width: 92
@@ -242,7 +236,6 @@ Rectangle {
             }
 
             Text {
-                renderType: Text.NativeRendering
                 anchors.left: timeText.right; anchors.leftMargin: 26
                 anchors.right: acctText.left; anchors.rightMargin: 14
                 anchors.verticalCenter: parent.verticalCenter
@@ -258,7 +251,6 @@ Rectangle {
 
             Text {
                 id: acctText
-                renderType: Text.NativeRendering
                 anchors.right: parent.right; anchors.rightMargin: 30
                 anchors.verticalCenter: parent.verticalCenter
                 text: (row.attendeeCount > 1 ? row.attendeeCount + " ppl · " : "") + row.account
@@ -273,7 +265,6 @@ Rectangle {
     }
 
     Text {
-        renderType: Text.NativeRendering
         anchors.centerIn: parent
         visible: list.count === 0 && !Backend.loadingAgenda
         text: "no upcoming events"

@@ -177,7 +177,6 @@ Rectangle {
             anchors.fill: parent; anchors.leftMargin: 10
             spacing: 8
             Text {
-                renderType: Text.NativeRendering
                 text: label; color: Theme.fg_muted
                 width: 56
                 font.family: Theme.fontFamily; font.pixelSize: 12
@@ -203,14 +202,12 @@ Rectangle {
         spacing: 8
 
         Text {
-            renderType: Text.NativeRendering
             text: comp.mode === "reply" ? "Reply" : comp.mode === "forward" ? "Forward" : "New message"
             color: Theme.fg
             font.family: Theme.fontFamily; font.pixelSize: 14; font.weight: 600
         }
 
         Text {
-            renderType: Text.NativeRendering
             visible: comp.mode === "forward"
             width: parent.width
             text: comp.forwardInfo
@@ -265,7 +262,6 @@ Rectangle {
                     radius: 11; color: Theme.surface2
                     Text {
                         id: chip
-                        renderType: Text.NativeRendering
                         anchors.left: parent.left; anchors.leftMargin: 8
                         anchors.verticalCenter: parent.verticalCenter
                         text: "󰁦 " + modelData.split("/").pop()
@@ -304,10 +300,10 @@ Rectangle {
                     border.color: index === comp.acSel ? Theme.hairline : "transparent"
                     Row {
                         anchors.fill: parent; anchors.leftMargin: 10; spacing: 8
-                        Text { renderType: Text.NativeRendering; anchors.verticalCenter: parent.verticalCenter
+                        Text { anchors.verticalCenter: parent.verticalCenter
                                text: modelData.name || modelData.email; color: Theme.fg
                                font.family: Theme.fontFamily; font.pixelSize: 13 }
-                        Text { renderType: Text.NativeRendering; anchors.verticalCenter: parent.verticalCenter
+                        Text { anchors.verticalCenter: parent.verticalCenter
                                visible: !!modelData.name
                                text: modelData.email; color: Theme.fg_muted
                                font.family: Theme.fontFamily; font.pixelSize: 11 }
@@ -356,12 +352,11 @@ Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
                 color: Theme.mode === "light" ? Theme.bg : Theme.surface2
                 border.width: 1; border.color: Theme.hairline
-                Text { id: t; renderType: Text.NativeRendering; anchors.centerIn: parent
+                Text { id: t; anchors.centerIn: parent
                        color: Qt.tint(Theme.fg_muted, Qt.rgba(Theme.fg.r, Theme.fg.g, Theme.fg.b, 0.55))
                        font.family: Theme.fontFamily; font.pixelSize: 11; font.weight: 500 }
             }
             component CLbl: Text {
-                renderType: Text.NativeRendering
                 anchors.verticalCenter: parent.verticalCenter
                 color: Qt.tint(Theme.fg_muted, Qt.rgba(Theme.fg.r, Theme.fg.g, Theme.fg.b, 0.55))
                 font.family: Theme.fontFamily; font.pixelSize: 11

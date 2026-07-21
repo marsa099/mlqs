@@ -160,7 +160,7 @@ FloatingWindow {
                      : modeName === "READ" ? Theme.surface3
                      : modeName === "YANK" ? Theme.red
                      : Theme.sky
-                Text { renderType: Text.NativeRendering
+                Text { 
                     id: modeLabel; anchors.centerIn: parent
                     text: parent.modeName
                     color: (parent.color.r * 0.299 + parent.color.g * 0.587 + parent.color.b * 0.114) > 0.5 ? Theme.ink : Theme.brightWhite
@@ -168,7 +168,7 @@ FloatingWindow {
                     font.pixelSize: 11; font.weight: 500; font.letterSpacing: 0.5
                 }
             }
-            Text { renderType: Text.NativeRendering
+            Text { 
                 anchors.verticalCenter: parent.verticalCenter
                 text: "panel: " + (statusbar.inConv ? "conversation" : win.pane)
                       + "   " + Backend.currentFolderName
@@ -191,7 +191,7 @@ FloatingWindow {
         }
         // Update banner: detect-only (the host applies via flake bump + rebuild),
         // takes over the hint slot when a newer build exists.
-        Text { renderType: Text.NativeRendering
+        Text { 
             visible: Backend.updateAvailable
             anchors.right: helpBadge.left; anchors.rightMargin: 12
             anchors.verticalCenter: parent.verticalCenter

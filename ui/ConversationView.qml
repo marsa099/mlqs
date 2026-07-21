@@ -957,7 +957,6 @@ Rectangle {
         // transparent so the card's rounded top corners stay rounded
         height: 52; color: "transparent"
         Text {
-            renderType: Text.NativeRendering
             anchors.left: parent.left; anchors.leftMargin: 14
             anchors.right: parent.right; anchors.rightMargin: 14
             anchors.verticalCenter: parent.verticalCenter
@@ -1039,7 +1038,6 @@ Rectangle {
                 Row {
                     spacing: 10
                     Text {
-                        renderType: Text.NativeRendering
                         text: modelData.from ? (modelData.from.name || modelData.from.email) : "?"
                         color: Theme.fg
                         font.family: Theme.fontFamily
@@ -1047,14 +1045,12 @@ Rectangle {
                         font.pixelSize: 13; font.weight: 600
                     }
                     Text {
-                        renderType: Text.NativeRendering
                         text: modelData.from && modelData.from.name ? "<" + modelData.from.email + ">" : ""
                         color: Theme.fg_muted
                         font.family: Theme.fontFamily; font.pixelSize: 12
                         anchors.verticalCenter: parent.verticalCenter
                     }
                     Text {
-                        renderType: Text.NativeRendering
                         text: Backend.fmtDate(modelData.date)
                         color: Theme.fg_muted
                         font.family: Theme.fontFamily; font.pixelSize: 12
@@ -1076,7 +1072,6 @@ Rectangle {
                             }
                         }
                         Text {
-                            renderType: Text.NativeRendering
                             text: "sending…"
                             color: Theme.fg_muted
                             font.family: Theme.fontFamily; font.pixelSize: 11
@@ -1084,7 +1079,6 @@ Rectangle {
                         }
                     }
                     Text {
-                        renderType: Text.NativeRendering
                         visible: modelData.failed === true
                         text: "failed to send"
                         color: Theme.red
@@ -1101,7 +1095,6 @@ Rectangle {
                         color: Theme.cursor
                         Text {
                             id: newLbl
-                            renderType: Text.NativeRendering
                             anchors.centerIn: parent
                             text: "new"
                             color: Theme.ink
@@ -1111,7 +1104,6 @@ Rectangle {
                 }
 
                 Text {
-                    renderType: Text.NativeRendering
                     width: parent.width
                     visible: text !== ""
                     text: cv.recipientLine(modelData)
@@ -1133,7 +1125,6 @@ Rectangle {
                         color: Theme.fg_muted
                     }
                     Text {
-                        renderType: Text.NativeRendering
                         anchors.verticalCenter: parent.verticalCenter
                         text: "Invitation"
                         color: Theme.fg_secondary
@@ -1157,7 +1148,6 @@ Rectangle {
                             HoverHandler { id: rsvpHov; cursorShape: Qt.PointingHandCursor }
                             Text {
                                 id: rsvpLbl
-                                renderType: Text.NativeRendering
                                 anchors.centerIn: parent
                                 text: modelData.cap + "  " + modelData.label
                                 color: Theme.fg
@@ -1205,7 +1195,6 @@ Rectangle {
                                          : (Theme.mode === "light" ? Theme.bg : Theme.surface3)
                                     Text {
                                         id: capT
-                                        renderType: Text.NativeRendering
                                         anchors.centerIn: parent
                                         text: attChip.hintLabel
                                         color: attChip.hintDim ? Theme.fg_muted : Theme.fg
@@ -1214,7 +1203,6 @@ Rectangle {
                                 }
                                 Text {
                                     id: chipText
-                                    renderType: Text.NativeRendering
                                     anchors.verticalCenter: parent.verticalCenter
                                     text: "󰁦 " + (attChip.modelData.name || "attachment")
                                     color: Theme.fg_secondary
@@ -1230,7 +1218,6 @@ Rectangle {
                 Text {
                     id: bodyText
                     visible: !dl.inVisual
-                    renderType: Text.NativeRendering
                     width: parent.width
                     textFormat: Text.RichText
                     wrapMode: Text.Wrap
@@ -1348,7 +1335,6 @@ Rectangle {
                                     text: hintCap.modelData.label
                                     color: hintCap.dim ? Theme.fg_muted : Theme.fg
                                     font.family: Theme.fontFamily; font.pixelSize: 12; font.weight: 500
-                                    renderType: Text.NativeRendering
                                 }
                             }
                         }
@@ -1408,7 +1394,7 @@ Rectangle {
                             border.width: 1; border.color: Theme.cursor
                             color: Theme.mode === "light" ? Theme.bg : Theme.surface2
                             Text {
-                                renderType: Text.QtRendering; renderTypeQuality: Text.VeryHighRenderTypeQuality
+                                renderTypeQuality: Text.VeryHighRenderTypeQuality
                                 anchors.centerIn: parent
                                 text: ""; color: Theme.cursor
                                 font.family: Theme.fontFamily; font.pixelSize: 12
@@ -1450,7 +1436,6 @@ Rectangle {
                                     text: yankCap.modelData.label
                                     color: yankCap.dim ? Theme.fg_muted : Theme.fg
                                     font.family: Theme.fontFamily; font.pixelSize: 12; font.weight: 500
-                                    renderType: Text.NativeRendering
                                 }
                             }
                         }
@@ -1468,7 +1453,6 @@ Rectangle {
                     wrapMode: TextEdit.Wrap
                     font: bodyText.font
                     text: bodyText.text
-                    renderType: Text.NativeRendering
                     color: Theme.fg_secondary
                     readOnly: true
                     activeFocusOnPress: false
@@ -1513,7 +1497,6 @@ Rectangle {
                             }
                             color: Theme.bg
                             font: geom.font
-                            renderType: Text.NativeRendering
                         }
                     }
 
@@ -1580,7 +1563,7 @@ Rectangle {
                             border.width: 1; border.color: Theme.cursor
                             color: Theme.mode === "light" ? Theme.bg : Theme.surface2
                             Text {
-                                renderType: Text.QtRendering; renderTypeQuality: Text.VeryHighRenderTypeQuality
+                                renderTypeQuality: Text.VeryHighRenderTypeQuality
                                 anchors.centerIn: parent
                                 text: ""; color: Theme.cursor
                                 font.family: Theme.fontFamily; font.pixelSize: 12
@@ -1623,7 +1606,6 @@ Rectangle {
                                     text: gYankCap.modelData.label
                                     color: gYankCap.dim ? Theme.fg_muted : Theme.fg
                                     font.family: Theme.fontFamily; font.pixelSize: 12; font.weight: 500
-                                    renderType: Text.NativeRendering
                                 }
                             }
                         }
@@ -1673,7 +1655,6 @@ Rectangle {
                                     text: gHintCap.modelData.label
                                     color: gHintCap.dim ? Theme.fg_muted : Theme.fg
                                     font.family: Theme.fontFamily; font.pixelSize: 12; font.weight: 500
-                                    renderType: Text.NativeRendering
                                 }
                             }
                         }
@@ -1706,7 +1687,7 @@ Rectangle {
                             Behavior on scale { NumberAnimation { duration: 250; easing.type: Easing.InOutQuad } }
                         }
                         Text {
-                            renderType: Text.QtRendering; renderTypeQuality: Text.VeryHighRenderTypeQuality
+                            renderTypeQuality: Text.VeryHighRenderTypeQuality
                             anchors.centerIn: parent
                             text: ""; color: Theme.cursor
                             font.family: Theme.fontFamily; font.pixelSize: 16
@@ -1732,7 +1713,6 @@ Rectangle {
                             font.hintingPreference: Font.PreferNoHinting
                             font.pixelSize: 11; font.weight: 500
                             font.features: ({ "tnum": 1 })
-                            renderType: Text.NativeRendering
                         }
                     }
                 }
@@ -1753,7 +1733,6 @@ Rectangle {
             // the toggle only exists when reply-all actually adds anyone
             readonly property bool hasAudience: cv.computeRecipients(true).cc.length > 0
             Text {
-                renderType: Text.NativeRendering
                 anchors.verticalCenter: parent.verticalCenter
                 text: "↰ " + cv.replyPrimary()
                 color: Theme.fg_muted
@@ -1773,7 +1752,6 @@ Rectangle {
                 border.color: Theme.hairline
                 Text {
                     id: allLbl
-                    renderType: Text.NativeRendering
                     anchors.centerIn: parent
                     text: cv.replyAll ? "+" + cv.replyExtras() + " all" : "sender only"
                     color: cv.replyAll ? Theme.fg_secondary : Theme.fg_muted
@@ -1910,7 +1888,6 @@ Rectangle {
     }
 
     Text {
-        renderType: Text.NativeRendering
         anchors.centerIn: parent
         visible: list.count === 0
         text: "loading…"
