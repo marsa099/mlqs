@@ -3,11 +3,16 @@ module mlqs
 go 1.26
 
 require (
+	github.com/emersion/go-imap/v2 v2.0.0-beta.8
+	github.com/emersion/go-message v0.18.2
+	github.com/emersion/go-sasl v0.0.0-20241020182733-b788ff22d5a6
+	github.com/emersion/go-smtp v0.24.0
 	github.com/esiqveland/notify v0.13.3
 	github.com/godbus/dbus/v5 v5.1.0
 	golang.org/x/image v0.44.0
 	golang.org/x/net v0.57.0
 	golang.org/x/oauth2 v0.27.0
+	golang.org/x/term v0.45.0
 	modernc.org/sqlite v1.49.1
 )
 

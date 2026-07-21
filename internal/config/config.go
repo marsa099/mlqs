@@ -4,12 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 type Account struct {
 	Name   string `json:"name"`   // rail label, unique across accounts
-	Vendor string `json:"vendor"` // "gmail" | "outlook"
+	Vendor string `json:"vendor"` // "gmail" | "outlook" | "imap"
 	Email  string `json:"email"`
 	// Gmail is BYO-credentials (OSS model): either inline id/secret or a
 	// pointer to the console-downloaded client JSON. Outlook falls back to
@@ -21,6 +23,19 @@ type Account struct {
 	// work/school and personal accounts). Set to a tenant ID or
 	// "organizations" to pin sign-in to one org and skip consumer routing.
 	Tenant string `json:"tenant,omitempty"`
+	// IMAP vendor: plain IMAP + SMTP. Security is "ssl" (implicit TLS),
+	// "starttls" or "plain". Ports default to 993 (imap) / 587 (smtp).
+	// Username defaults to Email. The password is never stored inline here —
+	// it comes from PasswordCmd, the MLQS_IMAP_PASSWORD env, or the cred file
+	// ~/.local/share/mlqs/tokens/<name>.imap (see IMAPPassword).
+	IMAPHost     string `json:"imap_host,omitempty"`
+	IMAPPort     int    `json:"imap_port,omitempty"`
+	IMAPSecurity string `json:"imap_security,omitempty"`
+	SMTPHost     string `json:"smtp_host,omitempty"`
+	SMTPPort     int    `json:"smtp_port,omitempty"`
+	SMTPSecurity string `json:"smtp_security,omitempty"`
+	Username     string `json:"username,omitempty"`
+	PasswordCmd  string `json:"password_cmd,omitempty"`
 }
 
 type Config struct {
@@ -86,6 +101,43 @@ func (a Account) GoogleCreds() (id, secret string, err error) {
 		return "", "", fmt.Errorf("%s: not a desktop-app client JSON (no \"installed\" key)", a.CredentialsFile)
 	}
 	return f.Installed.ClientID, f.Installed.ClientSecret, nil
+}
+
+// IMAPCredPath is where the IMAP password lands after `mlqs auth <name>`, next
+// to the OAuth token store.
+func IMAPCredPath(account string) string {
+	base := os.Getenv("XDG_DATA_HOME")
+	if base == "" {
+		base = filepath.Join(os.Getenv("HOME"), ".local", "share")
+	}
+	return filepath.Join(base, "mlqs", "tokens", account+".imap")
+}
+
+// IMAPPassword resolves the account's password in order: PasswordCmd output,
+// then the cred file written by `mlqs auth`, then the MLQS_IMAP_PASSWORD env.
+func (a Account) IMAPPassword() (string, error) {
+	if a.PasswordCmd != "" {
+		out, err := exec.Command("sh", "-c", a.PasswordCmd).Output()
+		if err != nil {
+			return "", fmt.Errorf("account %q: password_cmd: %w", a.Name, err)
+		}
+		return strings.TrimRight(string(out), "\r\n"), nil
+	}
+	if b, err := os.ReadFile(IMAPCredPath(a.Name)); err == nil {
+		var f struct {
+			Password string `json:"password"`
+		}
+		if err := json.Unmarshal(b, &f); err != nil {
+			return "", fmt.Errorf("parsing %s: %w", IMAPCredPath(a.Name), err)
+		}
+		if f.Password != "" {
+			return f.Password, nil
+		}
+	}
+	if p := os.Getenv("MLQS_IMAP_PASSWORD"); p != "" {
+		return p, nil
+	}
+	return "", fmt.Errorf("account %q not authorized yet — run: mlqs auth %s", a.Name, a.Name)
 }
 
 func expand(p string) string {
