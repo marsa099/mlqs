@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -180,19 +181,54 @@ func Source(ctx context.Context, a config.Account) (oauth2.TokenSource, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &persisting{account: a.Name, src: conf.TokenSource(ctx, tok), last: tok.AccessToken}, nil
+	return &persisting{
+		account: a.Name, ctx: ctx, conf: conf,
+		src: conf.TokenSource(ctx, tok), last: tok.AccessToken, refresh: tok.RefreshToken,
+	}, nil
 }
 
 type persisting struct {
 	account string
+	ctx     context.Context
+	conf    *oauth2.Config
 	src     oauth2.TokenSource
-	last    string
+	last    string // last access token seen — detects a refresh so we persist it
+	refresh string // refresh token in use — detects an on-disk replacement after re-auth
 }
 
 func (p *persisting) Token() (*oauth2.Token, error) {
 	t, err := p.src.Token()
 	if err != nil {
+		// A dead refresh token (tenant expiry, revoked session, or the user just
+		// ran `mlqs auth` after it died) surfaces as *oauth2.RetrieveError. The
+		// source was built once at startup, so a freshly-authed token on disk is
+		// invisible until restart. Reload from disk on failure: if the on-disk
+		// refresh token differs from the one that just failed, rebuild the source
+		// and retry once — so `mlqs auth <account>` needs no daemon restart.
+		var re *oauth2.RetrieveError
+		if errors.As(err, &re) {
+			if disk, lerr := LoadToken(p.account); lerr == nil &&
+				disk.RefreshToken != "" && disk.RefreshToken != p.refresh {
+				p.src = p.conf.TokenSource(p.ctx, disk)
+				p.refresh = disk.RefreshToken
+				p.last = disk.AccessToken
+				return p.persist(p.src.Token())
+			}
+		}
 		return nil, err
+	}
+	return p.persist(t, nil)
+}
+
+// persist writes a refreshed token back to disk (once, when the access token
+// changes) so a restart never re-prompts. Passed the (token, err) so both the
+// normal path and the reload-retry path share it.
+func (p *persisting) persist(t *oauth2.Token, err error) (*oauth2.Token, error) {
+	if err != nil {
+		return nil, err
+	}
+	if t.RefreshToken != "" {
+		p.refresh = t.RefreshToken // keep current, so "differs from disk" means an external re-auth
 	}
 	if t.AccessToken != p.last {
 		p.last = t.AccessToken
