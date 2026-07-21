@@ -2,7 +2,8 @@
 
 Native Linux mail client: Go daemon + Quickshell/QML UI. Gmail and
 Outlook/Microsoft 365 (mail + calendar, Teams/Meet links) via the vendors'
-REST APIs — no IMAP. Vim bindings throughout. Wayland only (quickshell).
+REST APIs, plus plain **IMAP/SMTP** for any standards mailbox. Vim bindings
+throughout. Wayland only (quickshell).
 Sibling of [slqs](https://github.com/daphen/slqs) (Slack) and dsqrd (Discord).
 
 - Unread-first inbox, Threads view (conversations you participate in)
@@ -163,6 +164,42 @@ Notes:
   it inside the org tenant instead of multitenant).
 - Replies thread through Graph's native reply flow, so recipients in
   Outlook see the usual quoted history.
+
+## IMAP / SMTP (any standards mailbox)
+
+For a plain mailbox — Fastmail, Loopia, mailbox.org, a self-hosted
+Dovecot, anything that speaks IMAP — there is no vendor REST API and no
+OAuth console: reads go over IMAP, sends over SMTP, and the password is
+the credential. Conversations are reconstructed from the server's
+`THREAD=REFERENCES` (a per-message fallback kicks in when the server
+lacks THREAD). No calendar.
+
+Account entry (`~/.config/mlqs/accounts.json`):
+
+```json
+{
+  "name": "personal", "vendor": "imap", "email": "you@example.com",
+  "imap_host": "imap.example.com", "imap_port": 993, "imap_security": "ssl",
+  "smtp_host": "smtp.example.com", "smtp_port": 587, "smtp_security": "starttls"
+}
+```
+
+- `imap_security` / `smtp_security`: `ssl` (implicit TLS), `starttls`, or
+  `plain`. Ports default to 993 (imap) / 587 (smtp); `username` defaults
+  to `email`.
+- Store the password: `mlqs auth personal` prompts for it (no echo) and
+  writes `~/.local/share/mlqs/tokens/personal.imap` (0600). Alternatives:
+  a `"password_cmd": "pass show mail/personal"` field, or the
+  `MLQS_IMAP_PASSWORD` env at auth time.
+
+Triage maps to IMAP moves: archive → the `\Archive` special-use folder,
+trash → `\Trash`, star → the `\Flagged` keyword, read → `\Seen`. Sends
+are `APPEND`ed to the `\Sent` folder. Reply threading is set via
+`In-Reply-To`/`References`.
+
+Known trade-off: `THREAD=REFERENCES` is RFC-5256, which merges by subject
+when messages carry no `References` — so a run of identically-subjected
+bulk mail (receipts, notifications) collapses into one conversation.
 
 ## Calendar
 
