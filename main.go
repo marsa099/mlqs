@@ -67,6 +67,7 @@ type daemon struct {
 	updateEvent map[string]any // latest updateAvailable event, replayed to new clients
 	updMu       sync.Mutex
 	updEtag     string
+	updTarget   string // SHA to update toward from the last 200 ("" = up to date); replayed on a 304
 	updLast     time.Time
 }
 
@@ -119,10 +120,11 @@ func updateRepos() (repo, upstream string) {
 	return
 }
 
-// checkUpdate does one update check and broadcasts updateAvailable when a newer
-// build target exists. Detect-only; applying is the host's job (flake bump +
-// rebuild). ETag-conditional (a 304 is free against GitHub's limit). Safe to
-// call concurrently.
+// checkUpdate does one update check and reconciles the updateAvailable state.
+// Detect-only; applying is the host's job (flake bump + rebuild). It sets the
+// event when a newer build target exists and CLEARS it when we're current, so
+// the badge never sticks. On a transient error (or an unusable response) it
+// leaves the prior verdict untouched. Safe to call concurrently.
 func (d *daemon) checkUpdate(ctx context.Context) {
 	if gitRev == "" {
 		return
@@ -131,29 +133,40 @@ func (d *daemon) checkUpdate(ctx context.Context) {
 	d.updLast = time.Now()
 	d.updMu.Unlock()
 	repo, upstream := updateRepos()
-	var latest string
+	var target string
+	var ok bool
 	if upstream != "" && upstream != repo {
-		latest = d.checkFork(ctx, repo, upstream)
+		target, ok = d.checkFork(ctx, repo, upstream)
 	} else {
-		latest = d.checkPlain(ctx, repo)
+		target, ok = d.checkPlain(ctx, repo)
 	}
-	if latest != "" && latest != gitRev {
-		ev := map[string]any{"type": "updateAvailable",
-			"current": shortRev(gitRev), "latest": shortRev(latest)}
-		d.updMu.Lock()
-		d.updateEvent = ev
-		d.updMu.Unlock()
+	if !ok {
+		return // transient error — keep the previous verdict
+	}
+	d.updMu.Lock()
+	if target != "" && target != gitRev {
+		d.updateEvent = map[string]any{"type": "updateAvailable",
+			"current": shortRev(gitRev), "latest": shortRev(target)}
+	} else {
+		d.updateEvent = nil // current on all legs — clear any stale badge
+	}
+	ev := d.updateEvent
+	d.updMu.Unlock()
+	if ev != nil {
 		d.broadcast(ev)
 	}
 }
 
-// ghGet performs an ETag-conditional GitHub API GET. Returns (body, true) on a
-// fresh 200; (nil, false) on a 304 (unchanged) or any transient error. A build
-// only ever hits one endpoint (fork xor plain), so the shared ETag is safe.
-func (d *daemon) ghGet(ctx context.Context, url, accept string) ([]byte, bool) {
+// ghGet performs an ETag-conditional GitHub API GET. Returns (body, 200) on a
+// fresh response, (nil, 304) when unchanged since the last check (free against
+// the rate limit), or (nil, other/0) on an error. The read limit is generous:
+// a compare response carries the full file diff and easily exceeds 64 KiB, and
+// a short read truncates the JSON so it won't parse. A build only ever hits one
+// endpoint (fork xor plain), so the shared ETag is safe.
+func (d *daemon) ghGet(ctx context.Context, url, accept string) ([]byte, int) {
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return nil, false
+		return nil, 0
 	}
 	req.Header.Set("User-Agent", "mlqs")
 	req.Header.Set("Accept", accept)
@@ -165,39 +178,75 @@ func (d *daemon) ghGet(ctx context.Context, url, accept string) ([]byte, bool) {
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, false
+		return nil, 0
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotModified {
+		return nil, http.StatusNotModified
+	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, false // 304 unchanged (ETag hit), or transient error
+		return nil, resp.StatusCode
 	}
 	if tag := resp.Header.Get("ETag"); tag != "" {
 		d.updMu.Lock()
 		d.updEtag = tag
 		d.updMu.Unlock()
 	}
-	b, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
-	return b, true
+	b, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	return b, http.StatusOK
 }
 
-// checkPlain returns the repo's main SHA (stock, single-repo build).
-func (d *daemon) checkPlain(ctx context.Context, repo string) string {
-	b, ok := d.ghGet(ctx, "https://api.github.com/repos/"+repo+"/commits/main", "application/vnd.github.sha")
-	if !ok {
-		return ""
+// cacheTarget records the SHA computed from a 200 so a later 304 can replay the
+// same verdict instead of losing it.
+func (d *daemon) cacheTarget(target string) {
+	d.updMu.Lock()
+	d.updTarget = target
+	d.updMu.Unlock()
+}
+
+func (d *daemon) cachedTarget() string {
+	d.updMu.Lock()
+	defer d.updMu.Unlock()
+	return d.updTarget
+}
+
+// checkPlain (stock, single-repo build) returns the update target — the repo's
+// main SHA when it differs from our build, else "". Second value is false only
+// on a genuine fetch error, so the caller can distinguish "up to date" from
+// "couldn't check".
+func (d *daemon) checkPlain(ctx context.Context, repo string) (string, bool) {
+	b, code := d.ghGet(ctx, "https://api.github.com/repos/"+repo+"/commits/main", "application/vnd.github.sha")
+	switch code {
+	case http.StatusOK:
+		sha := strings.TrimSpace(string(b))
+		target := ""
+		if sha != "" && sha != gitRev {
+			target = sha
+		}
+		d.cacheTarget(target)
+		return target, true
+	case http.StatusNotModified:
+		return d.cachedTarget(), true
+	default:
+		return "", false
 	}
-	return strings.TrimSpace(string(b))
 }
 
 // checkFork answers both legs with one compare(main...upstream:main):
 // base_commit is our fork's main tip (build the fork first if our binary is
 // behind it), and ahead_by is upstream's lead (its newest commit is the merge
-// target otherwise).
-func (d *daemon) checkFork(ctx context.Context, repo, upstream string) string {
+// target otherwise). Returns the target SHA (or "" when current), and false
+// only on a genuine fetch/parse error.
+func (d *daemon) checkFork(ctx context.Context, repo, upstream string) (string, bool) {
 	head := strings.SplitN(upstream, "/", 2)[0] + ":main" // e.g. daphen:main
-	b, ok := d.ghGet(ctx, "https://api.github.com/repos/"+repo+"/compare/main..."+head, "application/vnd.github+json")
-	if !ok {
-		return ""
+	b, code := d.ghGet(ctx, "https://api.github.com/repos/"+repo+"/compare/main..."+head, "application/vnd.github+json")
+	switch code {
+	case http.StatusNotModified:
+		return d.cachedTarget(), true
+	case http.StatusOK:
+		// fall through to parse
+	default:
+		return "", false
 	}
 	var cmp struct {
 		BaseCommit struct {
@@ -209,15 +258,16 @@ func (d *daemon) checkFork(ctx context.Context, repo, upstream string) string {
 		} `json:"commits"`
 	}
 	if err := json.Unmarshal(b, &cmp); err != nil {
-		return ""
+		return "", false
 	}
+	target := ""
 	if cmp.BaseCommit.SHA != "" && cmp.BaseCommit.SHA != gitRev {
-		return cmp.BaseCommit.SHA // a newer fork build exists — rebuild toward it
+		target = cmp.BaseCommit.SHA // a newer fork build exists — rebuild toward it
+	} else if cmp.AheadBy > 0 && len(cmp.Commits) > 0 {
+		target = cmp.Commits[len(cmp.Commits)-1].SHA // upstream has unmerged commits
 	}
-	if cmp.AheadBy > 0 && len(cmp.Commits) > 0 {
-		return cmp.Commits[len(cmp.Commits)-1].SHA // upstream has unmerged commits
-	}
-	return ""
+	d.cacheTarget(target)
+	return target, true
 }
 
 func (d *daemon) sendTo(c net.Conn, v any) {
