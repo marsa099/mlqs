@@ -549,7 +549,7 @@ func (d *daemon) handle(conn net.Conn, cmd command) {
 				}
 			}
 			out = append(out, map[string]any{
-				"id": m.ID, "convId": m.ConvID, "from": m.From, "to": m.To, "cc": m.Cc,
+				"id": m.ID, "convId": m.ConvID, "from": m.From, "replyTo": m.ReplyTo, "to": m.To, "cc": m.Cc,
 				"subject": m.Subject, "snippet": m.Snippet, "date": m.Date,
 				"unread": m.Unread, "starred": m.Starred, "attachments": atts,
 				"bodyRich":  rich,
