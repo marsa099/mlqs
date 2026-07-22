@@ -1131,6 +1131,7 @@ func main() {
 				SMTPHost:     a.SMTPHost,
 				SMTPPort:     a.SMTPPort,
 				SMTPSecurity: a.SMTPSecurity,
+				Threading:    a.IMAPThreading,
 			})
 			log.Printf("account %s (%s, imap) ready", a.Name, a.Email)
 		default:

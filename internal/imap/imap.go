@@ -47,6 +47,9 @@ type Config struct {
 	SMTPHost     string
 	SMTPPort     int
 	SMTPSecurity string
+	// Threading: "references" (default) uses server-side THREAD=REFERENCES;
+	// "flat" forces one conversation per message.
+	Threading string
 }
 
 func (c Config) user() string {
@@ -357,7 +360,7 @@ func (cl *Client) threads(c *imapclient.Client, unreadOnly bool) ([]thread, erro
 		crit.NotFlag = []imap.Flag{imap.FlagSeen}
 	}
 	var out []thread
-	if cl.hasThread(c) {
+	if cl.cfg.Threading != "flat" && cl.hasThread(c) {
 		tds, err := c.UIDThread(&imapclient.ThreadOptions{
 			Algorithm:      imap.ThreadReferences,
 			SearchCriteria: crit,
