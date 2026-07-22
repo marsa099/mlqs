@@ -116,11 +116,14 @@ FloatingWindow {
         anchorItem: sidebar.accountAnchor
         gap: 6
         panelWidth: 220
+        grabsKeys: true                          // ⌃s opens it focused; j/k navigate
+        scrimOpacity: 0.28                       // separate the panel from the sidebar behind
+        onClosed: keys.forceActiveFocus()        // hand keyboard back to the router
         currentId: Backend.currentAccount
         model: Backend.workspaces.map(w => ({
             id: w.id,
             label: w.name,
-            badge: (w.id === Backend.currentAccount) ? 0 : (Backend.accountUnread[w.id] || 0)
+            badge: Backend.accountUnread[w.id] || 0
         }))
         onActivated: id => Backend.selectAccount(id)
     }
@@ -388,6 +391,8 @@ FloatingWindow {
                 if (e.key === Qt.Key_Escape) {
                     if (cheatSheet.searching || cheatSheet.query) cheatSheet.resetSearch()
                     else cheatSheet.shown = false
+                } else if (e.key === Qt.Key_Q && !cheatSheet.searching) {
+                    cheatSheet.shown = false
                 } else if (e.key === Qt.Key_Slash && !cheatSheet.searching) {
                     cheatSheet.searching = true
                 } else if (e.key === Qt.Key_Question && !cheatSheet.searching) {
@@ -424,6 +429,10 @@ FloatingWindow {
             // ⌃⇧r: manual update check (daemon toasts the result)
             if (ctrl && (e.modifiers & Qt.ShiftModifier) && e.key === Qt.Key_R) {
                 Backend.checkForUpdates(); e.accepted = true; return
+            }
+            // ⌃s: open + focus the account switcher (j/k move, ↵ select, esc close)
+            if (ctrl && !(e.modifiers & Qt.ShiftModifier) && e.key === Qt.Key_S) {
+                acctDropdown.show(); e.accepted = true; return
             }
             // ⇧U: apply an available update (parity with slqs/dsqrd). Gated on
             // updateAvailable so it never shadows the u=undo case below.
@@ -489,7 +498,9 @@ FloatingWindow {
                 }
                 if (ctrl) {
                     // unhandled ctrl-chords fall through to the global handlers
-                } else {
+                } else if (!((e.modifiers & Qt.ShiftModifier) && (e.key === Qt.Key_I || e.key === Qt.Key_T || e.key === Qt.Key_C))) {
+                // ⇧I/⇧T/⇧C are global jumps (inbox/threads/calendar) — don't let
+                // the reply/motion switch eat them; fall through to the goto below
                 switch (e.key) {
                 case Qt.Key_H:
                     // bar-only state: h backs out (thread → read, single → inbox)
