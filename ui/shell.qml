@@ -7,7 +7,7 @@ import QsLib
 
 FloatingWindow {
     id: win
-    title: "mail-client"
+    title: "mlqs"
     // explicit: a cold-started UI must show without waiting for a summon
     // (the launcher's summonui broadcast fires before we connect)
     visible: true

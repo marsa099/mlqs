@@ -60,7 +60,7 @@ Notes for the agent:
     → API enablement missing; `not a desktop-app client JSON` → wrong
     Google download type; Azure admin-approval screen → org tenant
     policy blocks unverified apps.
-- **Launch**: `mlqs-client`. Window title is `mail-client` (WM rules
+- **Launch**: `mlqs-client`. Window title is `mlqs` (WM rules
   key off it). The daemon keeps running when the window closes —
   notifications and deep-links stay live.
 
