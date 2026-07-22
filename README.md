@@ -187,6 +187,9 @@ Account entry (`~/.config/mlqs/accounts.json`):
 - `imap_security` / `smtp_security`: `ssl` (implicit TLS), `starttls`, or
   `plain`. Ports default to 993 (imap) / 587 (smtp); `username` defaults
   to `email`.
+- `imap_threading`: `references` (default) groups reply chains via the
+  server's THREAD; `flat` gives one conversation per message — set it to
+  `flat` if the subject-merge below bothers you.
 - Store the password: `mlqs auth personal` prompts for it (no echo) and
   writes `~/.local/share/mlqs/tokens/personal.imap` (0600). Alternatives:
   a `"password_cmd": "pass show mail/personal"` field, or the
@@ -199,7 +202,8 @@ are `APPEND`ed to the `\Sent` folder. Reply threading is set via
 
 Known trade-off: `THREAD=REFERENCES` is RFC-5256, which merges by subject
 when messages carry no `References` — so a run of identically-subjected
-bulk mail (receipts, notifications) collapses into one conversation.
+bulk mail (receipts, notifications) collapses into one conversation. Set
+`"imap_threading": "flat"` to opt out and get one conversation per message.
 
 ## Calendar
 
