@@ -12,7 +12,7 @@
         pname = "mlqs";
         version = "0.1.0";
         src = ./.;
-        vendorHash = "sha256-iVzfXoevmMPnsClFVuPSGAlwUZPqLMtrhnN5sH/igR8=";
+        vendorHash = "sha256-GqJ4Ee7UOiBedaEXfbvOba+EPmozDGil9WwihY+wkt0=";
         subPackages = [ "." ];
         # Embed the build's git rev so the daemon can detect newer builds.
         ldflags = [ "-X main.gitRev=${self.rev or ""}" ];
