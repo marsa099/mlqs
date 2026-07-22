@@ -32,6 +32,7 @@ Item {
             [["h"], "Focus sidebar"], [["g", "g"], "Jump to top"], [["⇧g"], "Jump to bottom"],
             [["x"], "Star"], [["e"], "Archive"], [["d", "d"], "Trash"], [["u"], "Undo last remove"],
             [["v"], "Visual select"], [["r"], "Toggle read"], [["⇧r"], "Refresh"],
+            [["⇧u"], "Apply update (when available)"],
             [["n"], "Compose"], [["/"], "Search"], [["q"], "Hide window"],
         ]},
         { title: "Go to", rows: [

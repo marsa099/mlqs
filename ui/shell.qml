@@ -195,7 +195,7 @@ FloatingWindow {
             visible: Backend.updateAvailable
             anchors.right: helpBadge.left; anchors.rightMargin: 12
             anchors.verticalCenter: parent.verticalCenter
-            text: "⟳ update available · " + Backend.updateCurrent + " → " + Backend.updateLatest
+            text: "⟳ update available · " + Backend.updateCurrent + " → " + Backend.updateLatest + " · U to apply"
             color: Theme.orange
             font.family: Theme.fontFamily; font.hintingPreference: Font.PreferNoHinting; font.pixelSize: 12
         }
@@ -405,6 +405,11 @@ FloatingWindow {
             // ⌃⇧r: manual update check (daemon toasts the result)
             if (ctrl && (e.modifiers & Qt.ShiftModifier) && e.key === Qt.Key_R) {
                 Backend.checkForUpdates(); e.accepted = true; return
+            }
+            // ⇧U: apply an available update (parity with slqs/dsqrd). Gated on
+            // updateAvailable so it never shadows the u=undo case below.
+            if (!ctrl && (e.modifiers & Qt.ShiftModifier) && e.key === Qt.Key_U && Backend.updateAvailable) {
+                Backend.applyUpdate(); e.accepted = true; return
             }
             // visual mode owns the keyboard in the index
             if (!inConv && index.visualMode) {

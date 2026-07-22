@@ -507,6 +507,15 @@ Singleton {
     property bool updateAvailable: false
     property string updateCurrent: ""
     property string updateLatest: ""
+    // Shift+U → run the host's apply command (parity with slqs/dsqrd). Detect-only:
+    // the app never self-updates; SLK_UPDATE_CMD is the host's apply step (bump the
+    // flake + rebuild + restart). Runs via `sh -c` so it can spawn its own terminal
+    // for sudo. Toasts if unset — nothing on this machine sets it yet.
+    function applyUpdate() {
+        const cmd = Quickshell.env("SLK_UPDATE_CMD")
+        if (cmd && cmd.length > 0) Quickshell.execDetached(["sh", "-c", cmd])
+        else toast("No update command set — configure SLK_UPDATE_CMD")
+    }
 
     function onEvent(line) {
         let e
