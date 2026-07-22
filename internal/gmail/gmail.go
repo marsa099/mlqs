@@ -411,6 +411,7 @@ func (c *Client) GetConversation(ctx context.Context, id string) ([]provider.Mes
 			Starred: hasLabel(m.LabelIDs, "STARRED"),
 			Subject: headerVal(m.Payload.Headers, "Subject"),
 			From:    parseAddr(headerVal(m.Payload.Headers, "From")),
+			ReplyTo: parseAddrList(headerVal(m.Payload.Headers, "Reply-To")),
 			To:      parseAddrList(headerVal(m.Payload.Headers, "To")),
 			Cc:      parseAddrList(headerVal(m.Payload.Headers, "Cc")),
 		}

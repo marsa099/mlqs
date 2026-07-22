@@ -36,9 +36,13 @@ type Attachment struct {
 }
 
 type Message struct {
-	ID          string       `json:"id"`
-	ConvID      string       `json:"convId"`
-	From        Address      `json:"from"`
+	ID     string  `json:"id"`
+	ConvID string  `json:"convId"`
+	From   Address `json:"from"`
+	// Reply-To when the sender set one (RFC 5322 §3.6.2) — replies must
+	// target this over From; list servers (GitHub's reply+token@) depend on it
+	// and the bare From is often a no-reply that bounces.
+	ReplyTo     []Address    `json:"replyTo"`
 	To          []Address    `json:"to"`
 	Cc          []Address    `json:"cc"`
 	Bcc         []Address    `json:"bcc"`
