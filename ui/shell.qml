@@ -60,13 +60,16 @@ FloatingWindow {
     }
 
     Row {
-        anchors { top: parent.top; left: parent.left; right: parent.right; bottom: statusbar.top }
+        // uniform inset from the window's rounded frame so content padding is
+        // harmonious top/left (right + bottom handled by the panes/statusbar)
+        anchors { top: parent.top; left: parent.left; right: parent.right; bottom: statusbar.top; topMargin: 12; leftMargin: 12 }
 
         MailSidebar {
             id: sidebar
             width: 250; height: parent.height
             active: win.pane === "sidebar"
             onComposeRequested: composer.composeNew()
+            onAccountMenuRequested: acctDropdown.toggle()
         }
 
         Item {
@@ -104,6 +107,22 @@ FloatingWindow {
         color: Theme.ink; opacity: (composer.visible || eventComposer.visible) ? 0.5 : 0
         visible: opacity > 0
         Behavior on opacity { NumberAnimation { duration: 140 } }
+    }
+
+    // account switcher — mounted at the window root so it floats above the
+    // sidebar + panes; the trigger pill lives in the sidebar header.
+    Dropdown {
+        id: acctDropdown
+        anchorItem: sidebar.accountAnchor
+        gap: 6
+        panelWidth: 220
+        currentId: Backend.currentAccount
+        model: Backend.workspaces.map(w => ({
+            id: w.id,
+            label: w.name,
+            badge: (w.id === Backend.currentAccount) ? 0 : (Backend.accountUnread[w.id] || 0)
+        }))
+        onActivated: id => Backend.selectAccount(id)
     }
 
     MailComposer {

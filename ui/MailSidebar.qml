@@ -7,6 +7,11 @@ import QsLib
 Rectangle {
     id: bar
     signal composeRequested()
+    // account selector: the trigger lives here, but the dropdown overlay is
+    // mounted at the window root (shell.qml) so it floats above the panes
+    // rather than fighting the sidebar's own stacking.
+    signal accountMenuRequested()
+    property alias accountAnchor: acctTrigger
     // sits directly on the window canvas — no own surface, no divider
     color: "transparent"
     property bool active: false
@@ -67,9 +72,9 @@ Rectangle {
         height: 52
         // new-message button (reference: circular quill, header right)
         Rectangle {
-            anchors.right: parent.right; anchors.rightMargin: 10
+            anchors.right: parent.right; anchors.rightMargin: 6
             anchors.verticalCenter: parent.verticalCenter
-            width: 32; height: 32; radius: 16
+            width: 36; height: 36; radius: 18
             color: Theme.mode === "light" ? Theme.bg : Theme.surface2
             border.width: 1; border.color: Theme.hairline
             Icon {
@@ -83,10 +88,10 @@ Rectangle {
         // the tab row that overflowed under the compose button with 3+ accounts.
         Rectangle {
             id: acctTrigger
-            anchors.left: parent.left; anchors.leftMargin: 10
+            anchors.left: parent.left; anchors.leftMargin: 6
             anchors.verticalCenter: parent.verticalCenter
-            height: 26; radius: 13
-            width: Math.min(trigRow.implicitWidth + 24, parent.width - 62)
+            height: 36; radius: 18
+            width: Math.min(trigRow.implicitWidth + 24, parent.width - 54)
             color: Qt.rgba(Theme.fg.r, Theme.fg.g, Theme.fg.b, 0.10)
             border.width: 1; border.color: Theme.hairline
             readonly property string acctName:
@@ -132,23 +137,8 @@ Rectangle {
                 }
             }
             HoverHandler { cursorShape: Qt.PointingHandCursor }
-            TapHandler { onTapped: acctDropdown.toggle() }
+            TapHandler { onTapped: bar.accountMenuRequested() }
         }
-    }
-
-    // accounts dropdown — overlays the folder list below the header. Child of
-    // `bar` (not the header) so it isn't clipped; z in the component floats it.
-    Dropdown {
-        id: acctDropdown
-        anchorItem: acctTrigger
-        panelWidth: bar.width - 20
-        currentId: Backend.currentAccount
-        model: Backend.workspaces.map(w => ({
-            id: w.id,
-            label: w.name,
-            badge: (w.id === Backend.currentAccount) ? 0 : (Backend.accountUnread[w.id] || 0)
-        }))
-        onActivated: id => Backend.selectAccount(id)
     }
 
     // pinned Threads: conversations you participate in, across all folders
