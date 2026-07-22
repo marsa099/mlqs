@@ -92,18 +92,21 @@ Rectangle {
         toField.input.forceActiveFocus()
     }
 
-    // reply to the newest message; all=true adds every recipient minus self
+    // reply to the newest message; all=true adds every recipient minus self.
+    // Reply-To wins over From (RFC 5322) — list servers depend on it.
     function reply(all) {
         const msgs = Backend.messages
         if (msgs.length === 0) return
         const m = msgs[msgs.length - 1]
         mode = "reply"; replyToId = m.id; convId = Backend.openConvId; forwardId = ""; paths = []
-        toField.text = m.from ? m.from.email : ""
+        const sender = (m.replyTo && m.replyTo.length) ? m.replyTo : (m.from ? [m.from] : [])
+        toField.text = [...new Set(sender.map(a => a.email).filter(e => e))].join(", ")
         let cc = []
         if (all) {
             const self = (Backend.workspaces.find(w => w.id === Backend.currentAccount) || {}).email || ""
+            const senderSet = sender.map(a => a.email)
             const rest = (m.to || []).concat(m.cc || [])
-                .map(a => a.email).filter(e => e && e !== self && e !== toField.text)
+                .map(a => a.email).filter(e => e && e !== self && senderSet.indexOf(e) < 0)
             cc = [...new Set(rest)]
         }
         ccField.text = cc.join(", ")

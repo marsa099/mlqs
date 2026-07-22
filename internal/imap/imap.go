@@ -70,7 +70,7 @@ type Client struct {
 	conn    *imapclient.Client
 	special map[string]string // role ("sent"/"trash"/"archive"/…) -> mailbox name
 
-	mmu     sync.Mutex          // guards members
+	mmu     sync.Mutex            // guards members
 	members map[string][]imap.UID // convID -> member UIDs, populated on list/get
 }
 
@@ -760,6 +760,7 @@ func parseMessage(folder string, uidvalidity uint32, root, uid imap.UID, raw []b
 	if from, err := h.AddressList("From"); err == nil && len(from) > 0 {
 		pm.From = provider.Address{Name: from[0].Name, Email: from[0].Address}
 	}
+	pm.ReplyTo = mailAddrs(h, "Reply-To")
 	pm.To = mailAddrs(h, "To")
 	pm.Cc = mailAddrs(h, "Cc")
 

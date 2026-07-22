@@ -141,8 +141,13 @@ Rectangle {
     function computeRecipients(all) {
         const t = targetMsg()
         if (!t) return { to: [], cc: [] }
+        // Reply-To wins over From (RFC 5322): GitHub-style reply+token@
+        // addresses live there, and the From is often a no-reply that bounces
+        const sender = (t.replyTo && t.replyTo.length ? t.replyTo
+                        : (t.from && t.from.email ? [t.from] : []))
+            .map(a => a.email).filter(e => e && e.toLowerCase() !== cv.myEmail)
         let to = []
-        if (t.from && t.from.email && t.from.email.toLowerCase() !== cv.myEmail) to = [t.from.email]
+        if (sender.length) to = [...new Set(sender)]
         else to = (t.to || []).map(a => a.email).filter(e => e && e.toLowerCase() !== cv.myEmail)
         let cc = []
         if (all) {
@@ -153,7 +158,7 @@ Rectangle {
     }
     function _nameOf(email) {
         const t = targetMsg()
-        const pool = t ? [t.from].concat(t.to || [], t.cc || []) : []
+        const pool = t ? [t.from].concat(t.replyTo || [], t.to || [], t.cc || []) : []
         const hit = pool.find(a => a && a.email === email)
         return hit && hit.name ? hit.name : email
     }

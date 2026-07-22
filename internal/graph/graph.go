@@ -204,6 +204,7 @@ type apiMessage struct {
 	Subject        string         `json:"subject"`
 	BodyPreview    string         `json:"bodyPreview"`
 	From           *apiRecipient  `json:"from"`
+	ReplyTo        []apiRecipient `json:"replyTo"`
 	To             []apiRecipient `json:"toRecipients"`
 	Cc             []apiRecipient `json:"ccRecipients"`
 	Received       time.Time      `json:"receivedDateTime"`
@@ -316,7 +317,7 @@ func (c *Client) ListConversations(ctx context.Context, folderID, cursor string,
 func (c *Client) convMessages(ctx context.Context, convID string, withBody bool) ([]apiMessage, error) {
 	sel := listSelect
 	if withBody {
-		sel += ",body,toRecipients,ccRecipients"
+		sel += ",body,replyTo,toRecipients,ccRecipients"
 	}
 	q := url.Values{
 		"$filter": {"conversationId eq '" + strings.ReplaceAll(convID, "'", "''") + "'"},
@@ -356,6 +357,9 @@ func (c *Client) GetConversation(ctx context.Context, id string) ([]provider.Mes
 		}
 		if m.From != nil {
 			pm.From = m.From.addr()
+		}
+		for _, r := range m.ReplyTo {
+			pm.ReplyTo = append(pm.ReplyTo, r.addr())
 		}
 		for _, r := range m.To {
 			pm.To = append(pm.To, r.addr())
