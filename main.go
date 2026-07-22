@@ -1197,10 +1197,19 @@ func main() {
 			d.cals[a.Name] = g
 			log.Printf("account %s (%s, outlook) ready", a.Name, a.Email)
 		case "imap":
+			// validate host fields up front so a typo surfaces here, not on the
+			// first failed fetch after we've logged the account "ready"
+			if a.IMAPHost == "" || a.SMTPHost == "" {
+				log.Printf("account %s: imap needs imap_host and smtp_host — skipping", a.Name)
+				continue
+			}
 			pw, err := a.IMAPPassword()
 			if err != nil {
 				log.Printf("%v", err)
 				continue
+			}
+			if a.IMAPSecurity == "plain" || a.SMTPSecurity == "plain" {
+				log.Printf("account %s: WARNING — plain (cleartext) connection; the mailbox password is sent unencrypted. Use ssl or starttls unless this is a trusted local network.", a.Name)
 			}
 			// no calendar for plain IMAP — the daemon nil-guards d.cals lookups
 			d.providers[a.Name] = imapvendor.New(imapvendor.Config{
