@@ -19,7 +19,10 @@ Item {
     // Presentational only — shell.qml owns key handling (open/close/filter) and
     // sets shown/searching/query; the field below just displays `query`.
     function resetSearch() { searching = false; query = "" }
-    onShownChanged: resetSearch()
+    onShownChanged: { resetSearch(); if (shown) flick.contentY = 0 }
+    // keyboard scroll (shell.qml drives these while shown): j/k step, ⌃d/⌃u page
+    function scrollBy(dy) { flick.scrollBy(dy) }
+    function scrollPage(dir) { flick.scrollBy(dir * flick.height * 0.85) }
 
     // Flat ordered sections: { title, rows: [ [ [keys…], description ] … ] }.
     readonly property var sections: [
@@ -183,10 +186,25 @@ Item {
             }
         }
 
-        Row {
-            id: colsRow
+        // Scroll when the columns don't fit a short screen (small laptops) —
+        // otherwise the panel clips the bottom rows with no way to reach them.
+        // Trackpad/wheel scroll works natively; shell.qml's j/k/⌃d/⌃u call scrollBy.
+        Flickable {
+            id: flick
             anchors { top: header.bottom; left: parent.left; right: parent.right
                       bottom: parent.bottom; margins: 24; topMargin: 16 }
+            clip: true
+            contentWidth: width
+            contentHeight: colsRow.implicitHeight
+            flickableDirection: Flickable.VerticalFlick
+            boundsBehavior: Flickable.StopAtBounds
+            function scrollBy(dy) {
+                contentY = Math.max(0, Math.min(Math.max(0, contentHeight - height), contentY + dy))
+            }
+
+        Row {
+            id: colsRow
+            width: flick.width
             spacing: 28
 
             Repeater {
@@ -251,6 +269,7 @@ Item {
                 color: Theme.fg_muted
                 font.family: Theme.fontFamily; font.pixelSize: 13
             }
+        }
         }
     }
 }

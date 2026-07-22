@@ -373,6 +373,11 @@ FloatingWindow {
                     cheatSheet.searching = true
                 } else if (e.key === Qt.Key_Question && !cheatSheet.searching) {
                     cheatSheet.shown = false
+                } else if (!cheatSheet.searching && (e.modifiers & Qt.ControlModifier)
+                           && (e.key === Qt.Key_D || e.key === Qt.Key_U)) {
+                    cheatSheet.scrollPage(e.key === Qt.Key_D ? 1 : -1)
+                } else if (!cheatSheet.searching && (e.key === Qt.Key_J || e.key === Qt.Key_K)) {
+                    cheatSheet.scrollBy(e.key === Qt.Key_J ? 48 : -48)
                 } else if (cheatSheet.searching) {
                     if (e.key === Qt.Key_Backspace) cheatSheet.query = cheatSheet.query.slice(0, -1)
                     else if (e.text && e.text.length === 1 && e.text.charCodeAt(0) >= 0x20) cheatSheet.query += e.text
