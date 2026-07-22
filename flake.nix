@@ -14,8 +14,16 @@
         src = ./.;
         vendorHash = "sha256-iVzfXoevmMPnsClFVuPSGAlwUZPqLMtrhnN5sH/igR8=";
         subPackages = [ "." ];
-        # Embed the build's git rev so the daemon can detect newer builds.
-        ldflags = [ "-X main.gitRev=${self.rev or ""}" ];
+        # Embed the build's git rev so the daemon can detect newer builds, and
+        # the repos it polls: updateRepo is the repo we build from, upstreamRepo
+        # (a fork's origin) enables the two-legged check — stale build vs
+        # unmerged upstream. A stock build can drop the last two / leave
+        # upstreamRepo empty for a plain single-repo poll.
+        ldflags = [
+          "-X main.gitRev=${self.rev or ""}"
+          "-X main.updateRepo=marsa099/mlqs"
+          "-X main.upstreamRepo=daphen/mlqs"
+        ];
         postInstall = ''
           mkdir -p $out/share/mlqs
           cp -r ui $out/share/mlqs/ui
