@@ -15,6 +15,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/mail"
@@ -27,6 +28,9 @@ import (
 
 	"github.com/emersion/go-imap/v2"
 	"github.com/emersion/go-imap/v2/imapclient"
+	// charset registers the non-UTF-8 decoders (iso-8859-1, windows-1252, …)
+	// go-message needs to parse mail from providers that aren't UTF-8-only.
+	_ "github.com/emersion/go-message/charset"
 	gomail "github.com/emersion/go-message/mail"
 	"github.com/emersion/go-sasl"
 	"github.com/emersion/go-smtp"
@@ -141,8 +145,24 @@ func (cl *Client) reset() {
 
 // do runs fn against a live connection under the lock, redialing once if the
 // connection turns out to be dead (probed with NOOP so logical errors — e.g. a
-// SELECT on a missing folder — are not mistaken for a dropped socket).
-func (cl *Client) do(fn func(c *imapclient.Client) error) error {
+// SELECT on a missing folder — are not mistaken for a dropped socket). ctx is
+// honored at the boundaries (before running and before a retry) so a cancelled
+// caller doesn't queue behind the lock or re-run after its budget expired.
+func (cl *Client) do(ctx context.Context, fn func(c *imapclient.Client) error) error {
+	return cl.run(ctx, true, fn)
+}
+
+// doOnce is do without the redial-and-retry — for non-idempotent operations
+// (APPEND) where a retry after a mid-command socket drop could duplicate the
+// server-side effect.
+func (cl *Client) doOnce(ctx context.Context, fn func(c *imapclient.Client) error) error {
+	return cl.run(ctx, false, fn)
+}
+
+func (cl *Client) run(ctx context.Context, retry bool, fn func(c *imapclient.Client) error) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
 	c, err := cl.ensure()
@@ -150,7 +170,7 @@ func (cl *Client) do(fn func(c *imapclient.Client) error) error {
 		return err
 	}
 	err = fn(c)
-	if err != nil {
+	if err != nil && retry && ctx.Err() == nil {
 		if pingErr := c.Noop().Wait(); pingErr != nil {
 			cl.reset()
 			c, e := cl.ensure()
@@ -188,23 +208,25 @@ func decodeConvID(id string) (folder string, uidvalidity uint32, root imap.UID, 
 	return parts[0], uint32(uv), imap.UID(ru), nil
 }
 
-// messageID codec: folder \x1f uid — identifies a single message for
-// attachment fetches.
-func encodeMsgID(folder string, uid imap.UID) string {
-	return base64.RawURLEncoding.EncodeToString([]byte(fmt.Sprintf("%s\x1f%d", folder, uint32(uid))))
+// messageID codec: folder \x1f uidvalidity \x1f uid — identifies a single
+// message for attachment fetches, carrying UIDVALIDITY so a stale id can be
+// rejected after the mailbox is renumbered.
+func encodeMsgID(folder string, uidvalidity uint32, uid imap.UID) string {
+	return base64.RawURLEncoding.EncodeToString([]byte(fmt.Sprintf("%s\x1f%d\x1f%d", folder, uidvalidity, uint32(uid))))
 }
 
-func decodeMsgID(id string) (folder string, uid imap.UID, err error) {
+func decodeMsgID(id string) (folder string, uidvalidity uint32, uid imap.UID, err error) {
 	b, err := base64.RawURLEncoding.DecodeString(id)
 	if err != nil {
-		return "", 0, err
+		return "", 0, 0, err
 	}
-	parts := strings.SplitN(string(b), "\x1f", 2)
-	if len(parts) != 2 {
-		return "", 0, fmt.Errorf("bad messageID %q", id)
+	parts := strings.SplitN(string(b), "\x1f", 3)
+	if len(parts) != 3 {
+		return "", 0, 0, fmt.Errorf("bad messageID %q", id)
 	}
-	u, _ := strconv.ParseUint(parts[1], 10, 32)
-	return parts[0], imap.UID(u), nil
+	uv, _ := strconv.ParseUint(parts[1], 10, 32)
+	u, _ := strconv.ParseUint(parts[2], 10, 32)
+	return parts[0], uint32(uv), imap.UID(u), nil
 }
 
 // ---- folders ----
@@ -236,7 +258,7 @@ func roleForAttrs(name string, attrs []imap.MailboxAttr) string {
 
 func (cl *Client) ListFolders(ctx context.Context) ([]provider.Folder, error) {
 	var out []provider.Folder
-	err := cl.do(func(c *imapclient.Client) error {
+	err := cl.do(ctx, func(c *imapclient.Client) error {
 		datas, err := c.List("", "*", &imap.ListOptions{
 			ReturnSpecialUse: true,
 			ReturnStatus:     &imap.StatusOptions{NumMessages: true, NumUnseen: true},
@@ -318,18 +340,20 @@ func sortFolders(fs []provider.Folder) {
 func (cl *Client) specialMailbox(c *imapclient.Client, role string) string {
 	if cl.special == nil {
 		datas, err := c.List("", "*", &imap.ListOptions{ReturnSpecialUse: true}).Collect()
-		if err == nil {
-			m := map[string]string{}
-			for _, d := range datas {
-				r := roleForAttrs(d.Mailbox, d.Attrs)
-				if r != "label" && m[r] == "" {
-					m[r] = d.Mailbox
-				}
-			}
-			cl.special = m
-		} else {
-			cl.special = map[string]string{}
+		if err != nil {
+			// leave cl.special nil so the next call retries — caching an empty
+			// map here would disable special folders (Archive, Sent filing) for
+			// the life of the connection after a single transient LIST failure.
+			return ""
 		}
+		m := map[string]string{}
+		for _, d := range datas {
+			r := roleForAttrs(d.Mailbox, d.Attrs)
+			if r != "label" && m[r] == "" {
+				m[r] = d.Mailbox
+			}
+		}
+		cl.special = m
 	}
 	return cl.special[role]
 }
@@ -408,9 +432,9 @@ func (cl *Client) ListConversations(ctx context.Context, folderID, cursor string
 	if limit <= 0 {
 		limit = 50
 	}
-	off := parseOffset(cursor)
+	after := parseCursor(cursor)
 	var page provider.Page
-	err := cl.do(func(c *imapclient.Client) error {
+	err := cl.do(ctx, func(c *imapclient.Client) error {
 		sel, err := c.Select(folderID, nil).Wait()
 		if err != nil {
 			return err
@@ -420,14 +444,23 @@ func (cl *Client) ListConversations(ctx context.Context, folderID, cursor string
 			return err
 		}
 		page = provider.Page{}
-		if off >= len(ths) {
+		// Anchor the cursor to the last thread's max-UID rather than a numeric
+		// offset: threads are strictly ordered by max-UID (unique per message),
+		// so a page boundary stays put even as mail arrives (would shift an
+		// offset down, duplicating rows) or is expunged (shifting it up, skipping).
+		var pageThreads []thread
+		for _, t := range ths {
+			if after != 0 && t.maxUID >= after {
+				continue
+			}
+			pageThreads = append(pageThreads, t)
+			if len(pageThreads) >= limit {
+				break
+			}
+		}
+		if len(pageThreads) == 0 {
 			return nil
 		}
-		end := off + limit
-		if end > len(ths) {
-			end = len(ths)
-		}
-		pageThreads := ths[off:end]
 
 		// one UID FETCH for every member across the page
 		var all imap.UIDSet
@@ -443,8 +476,9 @@ func (cl *Client) ListConversations(ctx context.Context, folderID, cursor string
 			cl.remember(conv.ID, t.uids)
 			page.Conversations = append(page.Conversations, conv)
 		}
-		if end < len(ths) {
-			page.NextCursor = "off:" + strconv.Itoa(end)
+		last := pageThreads[len(pageThreads)-1]
+		if last.maxUID > 1 { // more may remain below this anchor
+			page.NextCursor = "uid:" + strconv.FormatUint(uint64(last.maxUID), 10)
 		}
 		return nil
 	})
@@ -454,12 +488,12 @@ func (cl *Client) ListConversations(ctx context.Context, folderID, cursor string
 	return page, nil
 }
 
-func parseOffset(cursor string) int {
-	if strings.HasPrefix(cursor, "off:") {
-		n, _ := strconv.Atoi(cursor[4:])
-		if n > 0 {
-			return n
-		}
+// parseCursor reads a "uid:<n>" anchor — the max-UID of the last row of the
+// previous page; the next page returns threads strictly below it.
+func parseCursor(cursor string) imap.UID {
+	if strings.HasPrefix(cursor, "uid:") {
+		n, _ := strconv.ParseUint(cursor[4:], 10, 32)
+		return imap.UID(n)
 	}
 	return 0
 }
@@ -584,7 +618,7 @@ func (cl *Client) GetConversationMeta(ctx context.Context, id string) (provider.
 		return provider.Conversation{}, err
 	}
 	var conv provider.Conversation
-	err = cl.do(func(c *imapclient.Client) error {
+	err = cl.do(ctx, func(c *imapclient.Client) error {
 		sel, err := c.Select(folder, nil).Wait()
 		if err != nil {
 			return err
@@ -651,9 +685,15 @@ func (cl *Client) GetConversation(ctx context.Context, id string) ([]provider.Me
 		return nil, err
 	}
 	var msgs []provider.Message
-	err = cl.do(func(c *imapclient.Client) error {
-		if _, err := c.Select(folder, nil).Wait(); err != nil {
+	err = cl.do(ctx, func(c *imapclient.Client) error {
+		sel, err := c.Select(folder, nil).Wait()
+		if err != nil {
 			return err
+		}
+		if sel.UIDValidity != uidvalidity {
+			// the mailbox was renumbered — this convID's root UID may now point
+			// at a different, reused message. Refuse rather than show the wrong thread.
+			return fmt.Errorf("uidvalidity changed for %s", folder)
 		}
 		uids, err := cl.membersFor(c, id, folder, root)
 		if err != nil {
@@ -703,7 +743,7 @@ func (cl *Client) GetConversation(ctx context.Context, id string) ([]provider.Me
 // are the ordinal index; FetchAttachment re-parses to return the bytes.
 func parseMessage(folder string, uidvalidity uint32, root, uid imap.UID, raw []byte) provider.Message {
 	pm := provider.Message{
-		ID:     encodeMsgID(folder, uid),
+		ID:     encodeMsgID(folder, uidvalidity, uid),
 		ConvID: encodeConvID(folder, uidvalidity, root),
 	}
 	mr, err := gomail.CreateReader(bytes.NewReader(raw))
@@ -732,9 +772,16 @@ func parseMessage(folder string, uidvalidity uint32, root, uid imap.UID, raw []b
 		if err != nil {
 			break
 		}
-		switch ph := part.Header.(type) {
-		case *gomail.InlineHeader:
-			ct, _, _ := ph.ContentType()
+		if isAttachmentSlot(part.Header) {
+			// real attachment, or an inline cid image — both occupy a slot so
+			// the daemon's cid rewriter and FetchAttachment can reach them.
+			n, _ := io.Copy(io.Discard, part.Body)
+			pm.Attachments = append(pm.Attachments, slotAttachment(part.Header, idx, n))
+			idx++
+			continue
+		}
+		if ih, ok := part.Header.(*gomail.InlineHeader); ok {
+			ct, _, _ := ih.ContentType()
 			body, _ := io.ReadAll(part.Body)
 			switch {
 			case ct == "text/html" && pm.BodyHTML == "":
@@ -742,26 +789,45 @@ func parseMessage(folder string, uidvalidity uint32, root, uid imap.UID, raw []b
 			case ct == "text/plain" && pm.BodyText == "":
 				pm.BodyText = string(body)
 			}
-		case *gomail.AttachmentHeader:
-			filename, _ := ph.Filename()
-			ct, _, _ := ph.ContentType()
-			cid := strings.Trim(ph.Get("Content-ID"), "<>")
-			n, _ := io.Copy(io.Discard, part.Body)
-			pm.Attachments = append(pm.Attachments, provider.Attachment{
-				ID:        strconv.Itoa(idx),
-				Name:      filename,
-				MIME:      ct,
-				Size:      n,
-				ContentID: cid,
-				Inline:    cid != "",
-			})
-			idx++
 		}
 	}
 	if pm.Snippet == "" {
 		pm.Snippet = snippet(pm.BodyText)
 	}
 	return pm
+}
+
+// isAttachmentSlot classifies a MIME part statelessly — a real attachment, or
+// an inline non-text part (a cid-referenced image). Inline text bodies are not
+// slots. parseMessage and FetchAttachment both use it so their attachment
+// indices line up.
+func isAttachmentSlot(ph gomail.PartHeader) bool {
+	switch h := ph.(type) {
+	case *gomail.AttachmentHeader:
+		return true
+	case *gomail.InlineHeader:
+		ct, _, _ := h.ContentType()
+		return ct != "text/plain" && ct != "text/html"
+	}
+	return false
+}
+
+func slotAttachment(ph gomail.PartHeader, idx int, size int64) provider.Attachment {
+	att := provider.Attachment{
+		ID:        strconv.Itoa(idx),
+		Size:      size,
+		ContentID: strings.Trim(ph.Get("Content-ID"), "<>"),
+	}
+	switch h := ph.(type) {
+	case *gomail.AttachmentHeader:
+		att.Name, _ = h.Filename()
+		att.MIME, _, _ = h.ContentType()
+		att.Inline = att.ContentID != ""
+	case *gomail.InlineHeader:
+		att.MIME, _, _ = h.ContentType()
+		att.Inline = true // inline non-text ⇒ a cid image
+	}
+	return att
 }
 
 func mailAddrs(h gomail.Header, key string) []provider.Address {
@@ -785,7 +851,7 @@ func snippet(text string) string {
 }
 
 func (cl *Client) FetchAttachment(ctx context.Context, messageID, attachmentID string) ([]byte, error) {
-	folder, uid, err := decodeMsgID(messageID)
+	folder, uidvalidity, uid, err := decodeMsgID(messageID)
 	if err != nil {
 		return nil, err
 	}
@@ -794,9 +860,13 @@ func (cl *Client) FetchAttachment(ctx context.Context, messageID, attachmentID s
 		return nil, fmt.Errorf("bad attachment id %q", attachmentID)
 	}
 	var data []byte
-	err = cl.do(func(c *imapclient.Client) error {
-		if _, err := c.Select(folder, nil).Wait(); err != nil {
+	err = cl.do(ctx, func(c *imapclient.Client) error {
+		sel, err := c.Select(folder, nil).Wait()
+		if err != nil {
 			return err
+		}
+		if sel.UIDValidity != uidvalidity {
+			return fmt.Errorf("uidvalidity changed for %s", folder)
 		}
 		var set imap.UIDSet
 		set.AddNum(uid)
@@ -824,7 +894,7 @@ func (cl *Client) FetchAttachment(ctx context.Context, messageID, attachmentID s
 			if err != nil {
 				return err
 			}
-			if _, ok := part.Header.(*gomail.AttachmentHeader); !ok {
+			if !isAttachmentSlot(part.Header) {
 				continue
 			}
 			if idx == want {
@@ -851,10 +921,10 @@ func (cl *Client) Delta(ctx context.Context, sinceToken string) (provider.Delta,
 		next    = map[string]folderState{}
 		resync  bool
 	)
-	err := cl.do(func(c *imapclient.Client) error {
+	err := cl.do(ctx, func(c *imapclient.Client) error {
 		datas, err := c.List("", "*", &imap.ListOptions{
 			ReturnSpecialUse: true,
-			ReturnStatus:     &imap.StatusOptions{UIDNext: true, UIDValidity: true},
+			ReturnStatus:     &imap.StatusOptions{UIDNext: true, UIDValidity: true, NumMessages: true, NumUnseen: true},
 		}).Collect()
 		if err != nil {
 			return err
@@ -863,21 +933,28 @@ func (cl *Client) Delta(ctx context.Context, sinceToken string) (provider.Delta,
 			if hasAttr(d.Attrs, imap.MailboxAttrNonExistent) || d.Status == nil {
 				continue
 			}
-			cur := folderState{uidValidity: d.Status.UIDValidity, uidNext: uint32(d.Status.UIDNext)}
+			cur := folderState{
+				UIDValidity: d.Status.UIDValidity,
+				UIDNext:     uint32(d.Status.UIDNext),
+				NumMessages: derefU32(d.Status.NumMessages),
+				NumUnseen:   derefU32(d.Status.NumUnseen),
+			}
 			next[d.Mailbox] = cur
 			old, ok := prev[d.Mailbox]
 			if !ok {
 				continue // new folder since last poll; baseline it silently
 			}
-			if old.uidValidity != cur.uidValidity {
+			if old.UIDValidity != cur.UIDValidity {
 				resync = true
 				continue
 			}
-			if cur.uidNext <= old.uidNext {
-				continue
+			if cur == old {
+				continue // nothing moved in this folder
 			}
-			// new UIDs [old.uidNext, cur.uidNext) → their conversations
-			ids, err := cl.newConvIDs(c, d.Mailbox, cur.uidValidity, imap.UID(old.uidNext), imap.UID(cur.uidNext-1))
+			// New mail (UIDNEXT advanced), an expunge (NumMessages dropped), or a
+			// read/star toggle from another client (NumUnseen moved) — thread the
+			// folder ONCE and emit the touched conversations.
+			ids, err := cl.changedConvIDs(c, d.Mailbox, old, cur)
 			if err != nil {
 				return err
 			}
@@ -894,84 +971,75 @@ func (cl *Client) Delta(ctx context.Context, sinceToken string) (provider.Delta,
 	return provider.Delta{Changed: dedup(changed), NextToken: formatDeltaToken(next)}, nil
 }
 
-func (cl *Client) newConvIDs(c *imapclient.Client, folder string, uidvalidity uint32, from, to imap.UID) ([]string, error) {
+// deltaWindow bounds how many recent conversations a state change (expunge or
+// read/star toggle) re-emits — flag changes deep in a large mailbox need
+// CONDSTORE/QRESYNC to catch precisely; this covers the recent, visible ones.
+const deltaWindow = 200
+
+// changedConvIDs threads the folder once and returns the conversation ids that
+// moved since `old`: any thread carrying a new UID (arrivals), plus — when the
+// folder's message/unseen counts shifted — the recent window (so a read or
+// delete on another client refreshes here). It caches members for exactly the
+// emitted conversations so the sync loop's GetConversationMeta hits the cache
+// instead of re-threading the whole mailbox per changed id.
+func (cl *Client) changedConvIDs(c *imapclient.Client, folder string, old, cur folderState) ([]string, error) {
 	if _, err := c.Select(folder, nil).Wait(); err != nil {
 		return nil, err
 	}
-	var set imap.UIDSet
-	set.AddRange(from, to)
-	// map each new message to its conversation root via threading
 	ths, err := cl.threads(c, false)
 	if err != nil {
 		return nil, err
 	}
-	rootOf := map[imap.UID]imap.UID{}
-	for _, t := range ths {
-		for _, u := range t.uids {
-			rootOf[u] = t.root
-		}
-	}
-	bufs, err := c.Fetch(set, &imap.FetchOptions{UID: true}).Collect()
-	if err != nil {
-		return nil, err
-	}
-	roots := map[imap.UID]bool{}
-	for _, b := range bufs {
-		if r, ok := rootOf[b.UID]; ok {
-			roots[r] = true
-		} else {
-			roots[b.UID] = true
-		}
-	}
+	stateMoved := cur.NumUnseen != old.NumUnseen || cur.NumMessages < old.NumMessages
 	var ids []string
-	for r := range roots {
-		ids = append(ids, encodeConvID(folder, uidvalidity, r))
+	for i, t := range ths { // ths is newest-first
+		hasNew := false
+		for _, u := range t.uids {
+			if u >= imap.UID(old.UIDNext) {
+				hasNew = true
+				break
+			}
+		}
+		if hasNew || (stateMoved && i < deltaWindow) {
+			id := encodeConvID(folder, cur.UIDValidity, t.root)
+			cl.remember(id, t.uids)
+			ids = append(ids, id)
+		}
 	}
 	return ids, nil
 }
 
-type folderState struct {
-	uidValidity uint32
-	uidNext     uint32
+func derefU32(p *uint32) uint32 {
+	if p == nil {
+		return 0
+	}
+	return *p
 }
 
+type folderState struct {
+	UIDValidity uint32 `json:"v"`
+	UIDNext     uint32 `json:"n"`
+	NumMessages uint32 `json:"m"`
+	NumUnseen   uint32 `json:"u"`
+}
+
+// The token is JSON — robust against mailbox names containing ':' or ',' that
+// a delimited format would mangle.
 func parseDeltaToken(s string) map[string]folderState {
 	out := map[string]folderState{}
 	if s == "" {
 		return out
 	}
-	for _, entry := range strings.Split(s, ",") {
-		// folder may contain ':'? mailbox names can. Split from the right.
-		i := strings.LastIndexByte(entry, ':')
-		if i < 0 {
-			continue
-		}
-		j := strings.LastIndexByte(entry[:i], ':')
-		if j < 0 {
-			continue
-		}
-		folder := entry[:j]
-		uv, _ := strconv.ParseUint(entry[j+1:i], 10, 32)
-		un, _ := strconv.ParseUint(entry[i+1:], 10, 32)
-		out[folder] = folderState{uidValidity: uint32(uv), uidNext: uint32(un)}
-	}
+	json.Unmarshal([]byte(s), &out)
 	return out
 }
 
 func formatDeltaToken(m map[string]folderState) string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
+	b, err := json.Marshal(m)
+	if err != nil {
+		return ""
 	}
-	sort.Strings(keys)
-	var b strings.Builder
-	for i, k := range keys {
-		if i > 0 {
-			b.WriteByte(',')
-		}
-		fmt.Fprintf(&b, "%s:%d:%d", k, m[k].uidValidity, m[k].uidNext)
-	}
-	return b.String()
+	return string(b)
 }
 
 func dedup(in []string) []string {
@@ -988,7 +1056,7 @@ func dedup(in []string) []string {
 
 // ---- flag / move operations ----
 
-func (cl *Client) storeFlag(convID string, flag imap.Flag, set bool) error {
+func (cl *Client) storeFlag(ctx context.Context, convID string, flag imap.Flag, set bool) error {
 	folder, uidvalidity, root, err := decodeConvID(convID)
 	if err != nil {
 		return err
@@ -997,7 +1065,7 @@ func (cl *Client) storeFlag(convID string, flag imap.Flag, set bool) error {
 	if !set {
 		op = imap.StoreFlagsDel
 	}
-	return cl.do(func(c *imapclient.Client) error {
+	return cl.do(ctx, func(c *imapclient.Client) error {
 		sel, err := c.Select(folder, nil).Wait()
 		if err != nil {
 			return err
@@ -1017,22 +1085,22 @@ func (cl *Client) storeFlag(convID string, flag imap.Flag, set bool) error {
 }
 
 func (cl *Client) MarkRead(ctx context.Context, convID string, read bool) error {
-	return cl.storeFlag(convID, imap.FlagSeen, read)
+	return cl.storeFlag(ctx, convID, imap.FlagSeen, read)
 }
 
 func (cl *Client) Star(ctx context.Context, convID string, starred bool) error {
-	return cl.storeFlag(convID, imap.FlagFlagged, starred)
+	return cl.storeFlag(ctx, convID, imap.FlagFlagged, starred)
 }
 
 // move relocates every member of the conversation to dstRole's mailbox. destFor
 // resolves the target; an empty target (no such special folder) is a no-op
 // error surfaced to the user.
-func (cl *Client) move(convID, dstRole, dstFallback string) error {
+func (cl *Client) move(ctx context.Context, convID, dstRole, dstFallback string) error {
 	folder, uidvalidity, root, err := decodeConvID(convID)
 	if err != nil {
 		return err
 	}
-	return cl.do(func(c *imapclient.Client) error {
+	return cl.do(ctx, func(c *imapclient.Client) error {
 		dst := cl.specialMailbox(c, dstRole)
 		if dst == "" {
 			dst = dstFallback
@@ -1064,27 +1132,27 @@ func (cl *Client) move(convID, dstRole, dstFallback string) error {
 }
 
 func (cl *Client) Archive(ctx context.Context, convID string) error {
-	return cl.move(convID, "archive", "Archive")
+	return cl.move(ctx, convID, "archive", "Archive")
 }
 
 func (cl *Client) Unarchive(ctx context.Context, convID string) error {
-	return cl.moveToInbox(convID)
+	return cl.moveToInbox(ctx, convID)
 }
 
 func (cl *Client) Trash(ctx context.Context, convID string) error {
-	return cl.move(convID, "trash", "Trash")
+	return cl.move(ctx, convID, "trash", "Trash")
 }
 
 func (cl *Client) Untrash(ctx context.Context, convID string) error {
-	return cl.moveToInbox(convID)
+	return cl.moveToInbox(ctx, convID)
 }
 
-func (cl *Client) moveToInbox(convID string) error {
+func (cl *Client) moveToInbox(ctx context.Context, convID string) error {
 	folder, uidvalidity, root, err := decodeConvID(convID)
 	if err != nil {
 		return err
 	}
-	return cl.do(func(c *imapclient.Client) error {
+	return cl.do(ctx, func(c *imapclient.Client) error {
 		if strings.EqualFold(folder, "INBOX") {
 			return nil
 		}
@@ -1118,7 +1186,7 @@ func (cl *Client) Search(ctx context.Context, q string, limit int) (provider.Pag
 		limit = 50
 	}
 	var page provider.Page
-	err := cl.do(func(c *imapclient.Client) error {
+	err := cl.do(ctx, func(c *imapclient.Client) error {
 		sel, err := c.Select("INBOX", nil).Wait()
 		if err != nil {
 			return err
@@ -1155,8 +1223,8 @@ func (cl *Client) Search(ctx context.Context, q string, limit int) (provider.Pag
 func (cl *Client) Send(ctx context.Context, d provider.Draft) error {
 	var inReplyTo string
 	if d.InReplyTo != "" {
-		if folder, uid, err := decodeMsgID(d.InReplyTo); err == nil {
-			cl.do(func(c *imapclient.Client) error {
+		if folder, _, uid, err := decodeMsgID(d.InReplyTo); err == nil {
+			cl.do(ctx, func(c *imapclient.Client) error {
 				if _, err := c.Select(folder, nil).Wait(); err != nil {
 					return err
 				}
@@ -1182,7 +1250,7 @@ func (cl *Client) Send(ctx context.Context, d provider.Draft) error {
 	}
 	// best-effort: file a copy in Sent (server may already, e.g. Gmail — but a
 	// plain IMAP host does not, so we APPEND). Failure here must not fail the send.
-	cl.appendSent(raw)
+	cl.appendSent(ctx, raw)
 	return nil
 }
 
@@ -1235,8 +1303,10 @@ func (cl *Client) sendSMTP(from string, to []string, raw []byte) error {
 	return c.SendMail(from, to, bytes.NewReader(raw))
 }
 
-func (cl *Client) appendSent(raw []byte) {
-	cl.do(func(c *imapclient.Client) error {
+func (cl *Client) appendSent(ctx context.Context, raw []byte) {
+	// doOnce, not do: a redial-and-retry after the server has committed the
+	// APPEND but before we read its response would file a second Sent copy.
+	cl.doOnce(ctx, func(c *imapclient.Client) error {
 		sent := cl.specialMailbox(c, "sent")
 		if sent == "" {
 			return nil
@@ -1262,9 +1332,10 @@ func (cl *Client) buildMIME(d provider.Draft, inReplyTo string) ([]byte, error) 
 	if len(d.Cc) > 0 {
 		h.SetAddressList("Cc", toMailAddrs(d.Cc))
 	}
-	if len(d.Bcc) > 0 {
-		h.SetAddressList("Bcc", toMailAddrs(d.Bcc))
-	}
+	// Deliberately no Bcc header: plain SMTP submission transmits the message
+	// bytes verbatim, so a Bcc: line would expose blind recipients to everyone
+	// (and file into Sent that way too). recipients() already carries Bcc in the
+	// SMTP envelope, which is all that's needed for delivery.
 	h.SetSubject(d.Subject)
 	h.SetDate(time.Now())
 	if inReplyTo != "" {
