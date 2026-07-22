@@ -83,7 +83,7 @@ Item {
         { title: "Global", rows: [
             [["⌃d", "⌃u"], "Half-page down / up"], [["⌃h", "⌃l"], "Sidebar / index"],
             [["⌃s"], "Next account"], [["⌃⇧h", "⌃⇧l"], "Prev / next account"],
-            [["⌃⇧r"], "Check for updates"], [["?"], "This cheat sheet"],
+            [["⌃⇧r"], "Check for updates"], [["⇧U"], "Apply update"], [["?"], "This cheat sheet"],
         ]},
         { title: "Insert", rows: [
             [["⌃↵"], "Send"], [["⌃o"], "Attach clipboard path"], [["esc"], "Discard / exit"],

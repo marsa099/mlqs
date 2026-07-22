@@ -71,6 +71,16 @@ Singleton {
     // ⌃⇧r: force an update check now; the daemon toasts the result.
     function checkForUpdates() { toast("Checking for updates…"); send({ type: "checkupdate" }) }
 
+    // ⇧U on the "update available" banner → run the host's apply step. Detect-only:
+    // the app never self-updates; SLK_UPDATE_CMD is the host's apply command (bump
+    // the flake + rebuild + restart). Runs via `sh -c` so it can spawn its own
+    // terminal (e.g. for a rebuild you can watch).
+    function applyUpdate() {
+        const cmd = Quickshell.env("SLK_UPDATE_CMD")
+        if (cmd && cmd.length > 0) { toast("Applying update…"); Quickshell.execDetached(["sh", "-c", cmd]) }
+        else toast("No update command set — configure SLK_UPDATE_CMD")
+    }
+
     // copy feedback is visual (row flash + bar morph, slqs grammar) — no toast
     property double copyPulse: 0
     function copyToClipboard(t) {
