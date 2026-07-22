@@ -79,54 +79,76 @@ Rectangle {
             HoverHandler { cursorShape: Qt.PointingHandCursor }
             TapHandler { onTapped: bar.composeRequested() }
         }
-        Row {
+        // account selector: one pill that opens the accounts dropdown. Replaces
+        // the tab row that overflowed under the compose button with 3+ accounts.
+        Rectangle {
+            id: acctTrigger
             anchors.left: parent.left; anchors.leftMargin: 10
             anchors.verticalCenter: parent.verticalCenter
-            spacing: 4
-            Repeater {
-                model: Backend.workspaces
-                delegate: Rectangle {
-                    required property var modelData
-                    readonly property bool activeTab: modelData.id === Backend.currentAccount
-                    readonly property int tabUnread: Backend.accountUnread[modelData.id] || 0
-                    height: 26; radius: 13
-                    width: Math.min(tabLbl.implicitWidth + 20, 110)
-                    // snap, don't animate — a fade reads as a blink on switch
-                    color: activeTab ? Qt.rgba(Theme.fg.r, Theme.fg.g, Theme.fg.b, 0.10)
-                         : tabHov.hovered ? Theme.hover : "transparent"
-                    border.width: 1
-                    border.color: activeTab ? Theme.hairline : "transparent"
-                    HoverHandler { id: tabHov }
-                    Text {
-                        id: tabLbl
-                        anchors.centerIn: parent
-                        text: modelData.name
-                        color: activeTab ? Theme.fg : Theme.dimmedFg
-                        font.family: Theme.fontFamily; font.hintingPreference: Font.PreferNoHinting
-                        font.pixelSize: 12; font.weight: activeTab ? 500 : 400
-                        elide: Text.ElideRight; width: Math.min(implicitWidth, 90)
-                        horizontalAlignment: Text.AlignHCenter
-                    }
-                    // inbox count on inactive accounts, riding the tab corner
-                    Rectangle {
-                        visible: !activeTab && tabUnread > 0
-                        anchors.right: parent.right; anchors.rightMargin: -5
-                        anchors.top: parent.top; anchors.topMargin: -5
-                        height: 15; width: Math.max(15, tabBadge.implicitWidth + 8)
-                        radius: 8; color: Theme.cursor
-                        Text {
-                            id: tabBadge
-                            anchors.centerIn: parent
-                            text: tabUnread > 99 ? "99+" : tabUnread
-                            color: Theme.ink
-                            font.family: Theme.fontFamily; font.pixelSize: 10; font.weight: 600
-                            font.features: ({ "tnum": 1 })
-                        }
-                    }
-                    TapHandler { onTapped: Backend.selectAccount(modelData.id) }
+            height: 26; radius: 13
+            width: Math.min(trigRow.implicitWidth + 24, parent.width - 62)
+            color: Qt.rgba(Theme.fg.r, Theme.fg.g, Theme.fg.b, 0.10)
+            border.width: 1; border.color: Theme.hairline
+            readonly property string acctName:
+                (Backend.workspaces.find(w => w.id === Backend.currentAccount) || ({})).name || ""
+            readonly property int othersUnread:
+                Backend.workspaces.reduce((s, w) =>
+                    s + (w.id !== Backend.currentAccount ? (Backend.accountUnread[w.id] || 0) : 0), 0)
+            Row {
+                id: trigRow
+                anchors.left: parent.left; anchors.leftMargin: 12
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 6
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Math.min(implicitWidth, 160)
+                    text: acctTrigger.acctName
+                    color: Theme.fg
+                    font.family: Theme.fontFamily; font.hintingPreference: Font.PreferNoHinting
+                    font.pixelSize: 12; font.weight: 500
+                    elide: Text.ElideRight
+                }
+                Icon {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 12; height: 12
+                    name: "chevron-down"; color: Theme.dimmedFg
                 }
             }
+            // aggregate unread across the OTHER accounts — inline you now only
+            // see the current one, so surface the rest on the pill corner.
+            Rectangle {
+                visible: acctTrigger.othersUnread > 0
+                anchors.right: parent.right; anchors.rightMargin: -5
+                anchors.top: parent.top; anchors.topMargin: -5
+                height: 15; width: Math.max(15, otherBadge.implicitWidth + 8)
+                radius: 8; color: Theme.cursor
+                Text {
+                    id: otherBadge
+                    anchors.centerIn: parent
+                    text: acctTrigger.othersUnread > 99 ? "99+" : acctTrigger.othersUnread
+                    color: Theme.ink
+                    font.family: Theme.fontFamily; font.pixelSize: 10; font.weight: 600
+                    font.features: ({ "tnum": 1 })
+                }
+            }
+            HoverHandler { cursorShape: Qt.PointingHandCursor }
+            TapHandler { onTapped: acctDropdown.toggle() }
         }
+    }
+
+    // accounts dropdown — overlays the folder list below the header. Child of
+    // `bar` (not the header) so it isn't clipped; z in the component floats it.
+    Dropdown {
+        id: acctDropdown
+        anchorItem: acctTrigger
+        panelWidth: bar.width - 20
+        currentId: Backend.currentAccount
+        model: Backend.workspaces.map(w => ({
+            id: w.id,
+            label: w.name,
+            badge: (w.id === Backend.currentAccount) ? 0 : (Backend.accountUnread[w.id] || 0)
+        }))
+        onActivated: id => Backend.selectAccount(id)
     }
 
     // pinned Threads: conversations you participate in, across all folders
