@@ -32,6 +32,7 @@ Item {
             [["h"], "Focus sidebar"], [["g", "g"], "Jump to top"], [["⇧g"], "Jump to bottom"],
             [["x"], "Star"], [["e"], "Archive"], [["d", "d"], "Trash"], [["u"], "Undo last remove"],
             [["v"], "Visual select"], [["r"], "Toggle read"], [["⇧r"], "Refresh"],
+            [["⇧u"], "Apply update (when available)"],
             [["n"], "Compose"], [["/"], "Search"], [["q"], "Hide window"],
         ]},
         { title: "Go to", rows: [
@@ -83,7 +84,7 @@ Item {
         { title: "Global", rows: [
             [["⌃d", "⌃u"], "Half-page down / up"], [["⌃h", "⌃l"], "Sidebar / index"],
             [["⌃s"], "Next account"], [["⌃⇧h", "⌃⇧l"], "Prev / next account"],
-            [["⌃⇧r"], "Check for updates"], [["⇧U"], "Apply update"], [["?"], "This cheat sheet"],
+            [["⌃⇧r"], "Check for updates"], [["?"], "This cheat sheet"],
         ]},
         { title: "Insert", rows: [
             [["⌃↵"], "Send"], [["⌃o"], "Attach clipboard path"], [["esc"], "Discard / exit"],
