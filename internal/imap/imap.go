@@ -990,7 +990,14 @@ func (cl *Client) changedConvIDs(c *imapclient.Client, folder string, old, cur f
 	if err != nil {
 		return nil, err
 	}
-	stateMoved := cur.NumUnseen != old.NumUnseen || cur.NumMessages < old.NumMessages
+	// Re-emit the recent window only for changes new UIDs can't explain: an
+	// expunge (message count dropped), or a read/star toggle from another
+	// client with no new mail (unseen moved while UIDNEXT held). New mail alone
+	// is covered by the per-thread hasNew check below, so it doesn't churn the
+	// whole window.
+	expunged := cur.NumMessages < old.NumMessages
+	flagOnly := cur.UIDNext == old.UIDNext && cur.NumUnseen != old.NumUnseen
+	stateMoved := expunged || flagOnly
 	var ids []string
 	for i, t := range ths { // ths is newest-first
 		hasNew := false
