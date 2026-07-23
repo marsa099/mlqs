@@ -69,8 +69,8 @@ type daemon struct {
 
 	updateEvent map[string]any // latest updateAvailable event, replayed to new clients
 	updMu       sync.Mutex
-	updEtag     string
-	updTarget   string // SHA to update toward from the last 200 ("" = up to date); replayed on a 304
+	updEtags    map[string]string // conditional-request state, keyed by endpoint
+	updTargets  map[string]string // verdict from each endpoint, replayed on a 304
 	updLast     time.Time
 }
 
@@ -157,6 +157,11 @@ func (d *daemon) checkUpdate(ctx context.Context) {
 	d.updMu.Unlock()
 	if ev != nil {
 		d.broadcast(ev)
+	} else {
+		// A client may still be showing an earlier verdict. Sending an explicit
+		// clear is essential: merely clearing the daemon's replay state leaves
+		// an already-connected UI claiming an update is available forever.
+		d.broadcast(map[string]any{"type": "updateCleared"})
 	}
 }
 
@@ -164,8 +169,8 @@ func (d *daemon) checkUpdate(ctx context.Context) {
 // fresh response, (nil, 304) when unchanged since the last check (free against
 // the rate limit), or (nil, other/0) on an error. The read limit is generous:
 // a compare response carries the full file diff and easily exceeds 64 KiB, and
-// a short read truncates the JSON so it won't parse. A build only ever hits one
-// endpoint (fork xor plain), so the shared ETag is safe.
+// a short read truncates the JSON so it won't parse. ETags are kept per URL
+// because fork builds compare both their fork and upstream.
 func (d *daemon) ghGet(ctx context.Context, url, accept string) ([]byte, int) {
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -174,7 +179,7 @@ func (d *daemon) ghGet(ctx context.Context, url, accept string) ([]byte, int) {
 	req.Header.Set("User-Agent", "mlqs")
 	req.Header.Set("Accept", accept)
 	d.updMu.Lock()
-	etag := d.updEtag
+	etag := d.updEtags[url]
 	d.updMu.Unlock()
 	if etag != "" {
 		req.Header.Set("If-None-Match", etag)
@@ -192,85 +197,83 @@ func (d *daemon) ghGet(ctx context.Context, url, accept string) ([]byte, int) {
 	}
 	if tag := resp.Header.Get("ETag"); tag != "" {
 		d.updMu.Lock()
-		d.updEtag = tag
+		if d.updEtags == nil {
+			d.updEtags = make(map[string]string)
+		}
+		d.updEtags[url] = tag
 		d.updMu.Unlock()
 	}
 	b, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
 	return b, http.StatusOK
 }
 
-// cacheTarget records the SHA computed from a 200 so a later 304 can replay the
-// same verdict instead of losing it.
-func (d *daemon) cacheTarget(target string) {
+// cacheTarget records the SHA computed from a 200 so a later 304 for the same
+// endpoint can replay the verdict instead of losing it.
+func (d *daemon) cacheTarget(endpoint, target string) {
 	d.updMu.Lock()
-	d.updTarget = target
+	if d.updTargets == nil {
+		d.updTargets = make(map[string]string)
+	}
+	d.updTargets[endpoint] = target
 	d.updMu.Unlock()
 }
 
-func (d *daemon) cachedTarget() string {
+func (d *daemon) cachedTarget(endpoint string) string {
 	d.updMu.Lock()
 	defer d.updMu.Unlock()
-	return d.updTarget
+	return d.updTargets[endpoint]
 }
 
-// checkPlain (stock, single-repo build) returns the update target — the repo's
-// main SHA when it differs from our build, else "". Second value is false only
-// on a genuine fetch error, so the caller can distinguish "up to date" from
-// "couldn't check".
+// checkPlain checks stock builds against their repository's main branch using
+// ancestry, not simple SHA inequality.
 func (d *daemon) checkPlain(ctx context.Context, repo string) (string, bool) {
-	b, code := d.ghGet(ctx, "https://api.github.com/repos/"+repo+"/commits/main", "application/vnd.github.sha")
-	switch code {
-	case http.StatusOK:
-		sha := strings.TrimSpace(string(b))
-		target := ""
-		if sha != "" && sha != gitRev {
-			target = sha
-		}
-		d.cacheTarget(target)
-		return target, true
-	case http.StatusNotModified:
-		return d.cachedTarget(), true
-	default:
-		return "", false
-	}
+	return d.checkComparedHead(ctx, repo, "main")
 }
 
-// checkFork answers both legs with one compare(main...upstream:main):
-// base_commit is our fork's main tip (build the fork first if our binary is
-// behind it), and ahead_by is upstream's lead (its newest commit is the merge
-// target otherwise). Returns the target SHA (or "" when current), and false
-// only on a genuine fetch/parse error.
-func (d *daemon) checkFork(ctx context.Context, repo, upstream string) (string, bool) {
-	head := strings.SplitN(upstream, "/", 2)[0] + ":main" // e.g. daphen:main
-	b, code := d.ghGet(ctx, "https://api.github.com/repos/"+repo+"/compare/main..."+head, "application/vnd.github+json")
+// checkComparedHead returns head's tip only when head contains commits that
+// are absent from this build. Comparing ancestry (rather than mere SHA
+// inequality) prevents an older main tip from being advertised as an update
+// when the binary was built from a feature branch ahead of main.
+func (d *daemon) checkComparedHead(ctx context.Context, repo, head string) (string, bool) {
+	endpoint := "https://api.github.com/repos/" + repo + "/compare/" + gitRev + "..." + head
+	b, code := d.ghGet(ctx, endpoint, "application/vnd.github+json")
 	switch code {
 	case http.StatusNotModified:
-		return d.cachedTarget(), true
+		return d.cachedTarget(endpoint), true
 	case http.StatusOK:
-		// fall through to parse
+		// parse below
 	default:
 		return "", false
 	}
 	var cmp struct {
-		BaseCommit struct {
+		AheadBy    int `json:"ahead_by"`
+		HeadCommit struct {
 			SHA string `json:"sha"`
-		} `json:"base_commit"`
-		AheadBy int `json:"ahead_by"`
-		Commits []struct {
-			SHA string `json:"sha"`
-		} `json:"commits"`
+		} `json:"head_commit"`
 	}
 	if err := json.Unmarshal(b, &cmp); err != nil {
 		return "", false
 	}
 	target := ""
-	if cmp.BaseCommit.SHA != "" && cmp.BaseCommit.SHA != gitRev {
-		target = cmp.BaseCommit.SHA // a newer fork build exists — rebuild toward it
-	} else if cmp.AheadBy > 0 && len(cmp.Commits) > 0 {
-		target = cmp.Commits[len(cmp.Commits)-1].SHA // upstream has unmerged commits
+	if cmp.AheadBy > 0 {
+		if cmp.HeadCommit.SHA == "" {
+			return "", false // unusable/truncated comparison; preserve prior state
+		}
+		target = cmp.HeadCommit.SHA
 	}
-	d.cacheTarget(target)
+	d.cacheTarget(endpoint, target)
 	return target, true
+}
+
+// checkFork checks both possible update legs against the commit actually built:
+// first fork main, then upstream main. A divergent or older tip is never called
+// an update unless it has commits missing from the current build.
+func (d *daemon) checkFork(ctx context.Context, repo, upstream string) (string, bool) {
+	if target, ok := d.checkComparedHead(ctx, repo, "main"); !ok || target != "" {
+		return target, ok
+	}
+	head := strings.SplitN(upstream, "/", 2)[0] + ":main" // e.g. daphen:main
+	return d.checkComparedHead(ctx, repo, head)
 }
 
 func (d *daemon) sendTo(c net.Conn, v any) {
