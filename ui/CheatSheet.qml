@@ -83,7 +83,7 @@ Item {
         ]},
         { title: "Global", rows: [
             [["⌃d", "⌃u"], "Half-page down / up"], [["⌃h", "⌃l"], "Sidebar / index"],
-            [["⌃s"], "Next account"], [["⌃⇧h", "⌃⇧l"], "Prev / next account"],
+            [["⌃s"], "Account menu (j/k, ↵)"], [["⌃⇧h", "⌃⇧l"], "Prev / next account"],
             [["⌃⇧r"], "Check for updates"], [["?"], "This cheat sheet"],
         ]},
         { title: "Insert", rows: [
