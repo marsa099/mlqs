@@ -187,9 +187,12 @@ Account entry (`~/.config/mlqs/accounts.json`):
 - `imap_security` / `smtp_security`: `ssl` (implicit TLS), `starttls`, or
   `plain`. Ports default to 993 (imap) / 587 (smtp); `username` defaults
   to `email`.
-- `imap_threading`: `references` (default) groups reply chains via the
-  server's THREAD; `flat` gives one conversation per message — set it to
-  `flat` if the subject-merge below bothers you.
+- `imap_threading`: `smart` (the default; the legacy value `references` is
+  accepted too) keeps explicit `References`/`In-Reply-To` chains, splits the
+  server's unrelated subject-only merges, and cautiously repairs localized
+  replies such as `Re:`/`Sv:` when headers are missing. `strict` disables that
+  subject fallback, `server` preserves the server's raw RFC-5256 grouping, and
+  `flat` gives one conversation per message.
 - Store the password: `mlqs auth personal` prompts for it (no echo) and
   writes `~/.local/share/mlqs/tokens/personal.imap` (0600). Alternatives:
   a `"password_cmd": "pass show mail/personal"` field, or the
@@ -200,10 +203,11 @@ trash → `\Trash`, star → the `\Flagged` keyword, read → `\Seen`. Sends
 are `APPEND`ed to the `\Sent` folder. Reply threading is set via
 `In-Reply-To`/`References`.
 
-Known trade-off: `THREAD=REFERENCES` is RFC-5256, which merges by subject
-when messages carry no `References` — so a run of identically-subjected
-bulk mail (receipts, notifications) collapses into one conversation. Set
-`"imap_threading": "flat"` to opt out and get one conversation per message.
+RFC-5256 requires servers to merge matching subjects even without reference
+headers. The default smart mode post-processes that result: independent bulk
+mail such as recurring receipts stays separate, while explicit reply chains
+remain authoritative. Use `server` only if you prefer the server's unmodified
+RFC-5256 result.
 
 ## Calendar
 

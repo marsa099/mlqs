@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/emersion/go-imap/v2"
+
 	"mlqs/internal/provider"
 )
 
@@ -77,6 +79,77 @@ func TestInlineCidBecomesAttachment(t *testing.T) {
 	a := pm.Attachments[0]
 	if a.ContentID != "img1" || !a.Inline || a.ID != "0" {
 		t.Fatalf("inline attachment wrong: %+v", a)
+	}
+}
+
+func TestSmartThreadSplitsUnrelatedSameSubjectMail(t *testing.T) {
+	coarse := []thread{mkThread([]imap.UID{1, 2, 3})}
+	meta := map[imap.UID]threadMeta{
+		1: {uid: 1, subject: "Din faktura från Apple"},
+		2: {uid: 2, subject: "Din faktura från Apple"},
+		3: {uid: 3, subject: "Din faktura från Apple"},
+	}
+	got := splitServerThreads(coarse, meta, true)
+	if len(got) != 3 {
+		t.Fatalf("independent recurring mail collapsed into %d threads: %+v", len(got), got)
+	}
+}
+
+func TestSmartThreadKeepsExplicitReferences(t *testing.T) {
+	coarse := []thread{mkThread([]imap.UID{10, 11, 12})}
+	meta := map[imap.UID]threadMeta{
+		10: {uid: 10, messageID: "root@example", subject: "Question"},
+		11: {uid: 11, messageID: "reply@example", inReplyTo: []string{"root@example"}, subject: "Sv: Question"},
+		12: {uid: 12, messageID: "other@example", subject: "Question"},
+	}
+	got := splitServerThreads(coarse, meta, true)
+	if len(got) != 2 || len(got[0].uids) != 2 || got[0].uids[0] != 10 || got[0].uids[1] != 11 {
+		t.Fatalf("explicit thread was not preserved while subject merge was split: %+v", got)
+	}
+}
+
+func TestSmartThreadLocalizedSubjectFallback(t *testing.T) {
+	participants := func(xs ...string) map[string]bool {
+		m := map[string]bool{}
+		for _, x := range xs {
+			m[x] = true
+		}
+		return m
+	}
+	coarse := []thread{mkThread([]imap.UID{20, 21})}
+	meta := map[imap.UID]threadMeta{
+		20: {uid: 20, subject: "Möte", sender: "a@example", recipients: participants("b@example"), participants: participants("a@example", "b@example")},
+		21: {uid: 21, subject: "SV: Möte", sender: "b@example", recipients: participants("a@example"), participants: participants("a@example", "b@example")},
+	}
+	if got := splitServerThreads(coarse, meta, true); len(got) != 1 || len(got[0].uids) != 2 {
+		t.Fatalf("localized reply fallback failed: %+v", got)
+	}
+	meta[21] = threadMeta{uid: 21, subject: "Fwd: Möte", sender: "b@example", recipients: participants("a@example"), participants: participants("a@example", "b@example")}
+	if got := splitServerThreads(coarse, meta, true); len(got) != 2 {
+		t.Fatalf("forward incorrectly joined to original: %+v", got)
+	}
+}
+
+func TestUnreadFilterKeepsStableRootAndAllMembers(t *testing.T) {
+	all := []thread{mkThread([]imap.UID{5, 8, 13}), mkThread([]imap.UID{21})}
+	got := filterThreadsByUID(all, map[imap.UID]bool{13: true})
+	if len(got) != 1 || got[0].root != 5 || len(got[0].uids) != 3 {
+		t.Fatalf("unread filter changed thread identity or discarded seen ancestors: %+v", got)
+	}
+}
+
+func TestSubjectKind(t *testing.T) {
+	cases := []struct{ in, kind, base string }{
+		{" SV: Re:  Quarterly  report ", "reply", "quarterly report"},
+		{"Re[2]: Hello", "reply", "hello"},
+		{"Fwd: Re: Hello", "forward", "hello"},
+		{"Din faktura från Apple", "", "din faktura från apple"},
+	}
+	for _, tc := range cases {
+		kind, base := subjectKind(tc.in)
+		if kind != tc.kind || base != tc.base {
+			t.Errorf("subjectKind(%q) = (%q, %q), want (%q, %q)", tc.in, kind, base, tc.kind, tc.base)
+		}
 	}
 }
 

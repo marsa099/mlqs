@@ -20,6 +20,7 @@ import (
 	"io"
 	"net/mail"
 	"os"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -51,8 +52,8 @@ type Config struct {
 	SMTPHost     string
 	SMTPPort     int
 	SMTPSecurity string
-	// Threading: "references" (default) uses server-side THREAD=REFERENCES;
-	// "flat" forces one conversation per message.
+	// Threading defaults to smart post-processing of THREAD=REFERENCES.
+	// "strict", "server", and "flat" are documented in README.md.
 	Threading string
 }
 
@@ -375,19 +376,241 @@ func flattenThread(td imapclient.ThreadData, into *[]imap.UID) {
 	}
 }
 
-// threads returns the folder's conversations newest-first (by highest member
-// UID, a cheap proxy for most-recent arrival). When the server lacks THREAD,
-// every message becomes its own conversation.
+// threadMeta contains only the headers needed to undo REFERENCES' mandatory
+// final subject merge and to repair reply chains from clients which omitted
+// References. It deliberately excludes message bodies.
+type threadMeta struct {
+	uid          imap.UID
+	messageID    string
+	inReplyTo    []string
+	references   []string
+	subject      string
+	when         time.Time
+	participants map[string]bool
+	sender       string
+	recipients   map[string]bool
+	automated    bool
+}
+
+var messageIDRE = regexp.MustCompile(`<([^<>\s]+)>`)
+
+func normalizeMessageID(s string) string {
+	return strings.ToLower(strings.Trim(strings.TrimSpace(s), "<>"))
+}
+
+func messageIDs(s string) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, m := range messageIDRE.FindAllStringSubmatch(s, -1) {
+		id := normalizeMessageID(m[1])
+		if id != "" && !seen[id] {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+func addEnvelopeAddress(set map[string]bool, as []imap.Address) {
+	for _, a := range as {
+		if addr := strings.ToLower(a.Addr()); addr != "" {
+			set[addr] = true
+		}
+	}
+}
+
+func parseThreadMeta(b *imapclient.FetchMessageBuffer, section *imap.FetchItemBodySection) threadMeta {
+	m := threadMeta{uid: b.UID, when: b.InternalDate, participants: map[string]bool{}, recipients: map[string]bool{}}
+	if e := b.Envelope; e != nil {
+		m.messageID = normalizeMessageID(e.MessageID)
+		for _, id := range e.InReplyTo {
+			if id = normalizeMessageID(id); id != "" {
+				m.inReplyTo = append(m.inReplyTo, id)
+			}
+		}
+		m.subject = e.Subject
+		if !e.Date.IsZero() {
+			m.when = e.Date
+		}
+		if len(e.From) > 0 {
+			m.sender = strings.ToLower(e.From[0].Addr())
+		}
+		addEnvelopeAddress(m.participants, e.From)
+		addEnvelopeAddress(m.participants, e.To)
+		addEnvelopeAddress(m.participants, e.Cc)
+		addEnvelopeAddress(m.recipients, e.To)
+		addEnvelopeAddress(m.recipients, e.Cc)
+	}
+	raw := b.FindBodySection(section)
+	if len(raw) == 0 {
+		return m
+	}
+	msg, err := mail.ReadMessage(bytes.NewReader(append(append([]byte(nil), raw...), '\r', '\n', '\r', '\n')))
+	if err != nil {
+		return m
+	}
+	m.references = messageIDs(msg.Header.Get("References"))
+	// Some servers omit malformed In-Reply-To values from ENVELOPE. Keep any
+	// syntactically useful IDs from the original header as a fallback.
+	if len(m.inReplyTo) == 0 {
+		m.inReplyTo = messageIDs(msg.Header.Get("In-Reply-To"))
+	}
+	auto := strings.ToLower(strings.TrimSpace(msg.Header.Get("Auto-Submitted")))
+	precedence := strings.ToLower(strings.TrimSpace(msg.Header.Get("Precedence")))
+	m.automated = (auto != "" && auto != "no") || msg.Header.Get("List-Id") != "" ||
+		precedence == "bulk" || precedence == "list" || precedence == "junk"
+	return m
+}
+
+// splitServerThreads retains explicit Message-ID relationships but removes the
+// subject-only merge mandated by RFC 5256. In smart mode, a conservative
+// localized reply-subject fallback repairs mail with missing reference headers.
+func splitServerThreads(coarse []thread, meta map[imap.UID]threadMeta, smart bool) []thread {
+	var out []thread
+	for _, t := range coarse {
+		if len(t.uids) < 2 {
+			out = append(out, t)
+			continue
+		}
+		n := len(t.uids)
+		parent := make([]int, n)
+		for i := range parent {
+			parent[i] = i
+		}
+		var find func(int) int
+		find = func(x int) int {
+			if parent[x] != x {
+				parent[x] = find(parent[x])
+			}
+			return parent[x]
+		}
+		union := func(a, b int) {
+			a, b = find(a), find(b)
+			if a != b {
+				parent[b] = a
+			}
+		}
+		byID := map[string]int{}
+		for i, u := range t.uids {
+			if id := meta[u].messageID; id != "" {
+				byID[id] = i
+			}
+		}
+		// A missing referenced parent is represented by refOwner: sibling replies
+		// to the same absent message still belong to the same conversation.
+		refOwner := map[string]int{}
+		for i, u := range t.uids {
+			m := meta[u]
+			refs := append(append([]string(nil), m.references...), m.inReplyTo...)
+			for _, ref := range refs {
+				if j, ok := byID[ref]; ok {
+					union(i, j)
+				}
+				if j, ok := refOwner[ref]; ok {
+					union(i, j)
+				} else {
+					refOwner[ref] = i
+				}
+			}
+		}
+		if smart {
+			for i, u := range t.uids {
+				child := meta[u]
+				kind, base := subjectKind(child.subject)
+				// Subject is only a repair path. Never let it override or bridge
+				// components for a message which already supplied explicit links.
+				if kind != "reply" || base == "" || child.automated || len(child.references) > 0 || len(child.inReplyTo) > 0 {
+					continue
+				}
+				best, bestDate := -1, time.Time{}
+				for j, v := range t.uids {
+					if i == j {
+						continue
+					}
+					candidate := meta[v]
+					candidateKind, candidateBase := subjectKind(candidate.subject)
+					if candidateKind == "forward" || candidateBase != base || candidate.automated || !plausibleReply(child, candidate) {
+						continue
+					}
+					if !child.when.IsZero() && !candidate.when.IsZero() {
+						gap := child.when.Sub(candidate.when)
+						if gap < 0 || gap > 90*24*time.Hour {
+							continue
+						}
+					}
+					if best < 0 || candidate.when.After(bestDate) {
+						best, bestDate = j, candidate.when
+					}
+				}
+				if best >= 0 {
+					union(i, best)
+				}
+			}
+		}
+		groups := map[int][]imap.UID{}
+		var order []int
+		for i, u := range t.uids {
+			r := find(i)
+			if _, ok := groups[r]; !ok {
+				order = append(order, r)
+			}
+			groups[r] = append(groups[r], u)
+		}
+		for _, r := range order {
+			out = append(out, mkThread(groups[r]))
+		}
+	}
+	return out
+}
+
+func plausibleReply(child, candidate threadMeta) bool {
+	if child.sender != "" && candidate.recipients[child.sender] {
+		return true
+	}
+	if candidate.sender != "" && child.recipients[candidate.sender] {
+		return true
+	}
+	for a := range child.participants {
+		if candidate.participants[a] {
+			return true
+		}
+	}
+	return false
+}
+
+func filterThreadsByUID(threads []thread, selected map[imap.UID]bool) []thread {
+	out := make([]thread, 0, len(threads))
+	for _, t := range threads {
+		for _, u := range t.uids {
+			if selected[u] {
+				out = append(out, t) // retain every member, including seen ancestors
+				break
+			}
+		}
+	}
+	return out
+}
+
+// threads returns complete conversations newest-first. unreadOnly filters the
+// completed conversations instead of threading only UNSEEN messages: filtering
+// first changes roots/IDs and used to show one conversation twice while also
+// poisoning the member cache with only its unread subset.
 func (cl *Client) threads(c *imapclient.Client, unreadOnly bool) ([]thread, error) {
-	crit := &imap.SearchCriteria{}
+	var unseen map[imap.UID]bool
 	if unreadOnly {
-		crit.NotFlag = []imap.Flag{imap.FlagSeen}
+		data, err := c.UIDSearch(&imap.SearchCriteria{NotFlag: []imap.Flag{imap.FlagSeen}}, nil).Wait()
+		if err != nil {
+			return nil, err
+		}
+		unseen = map[imap.UID]bool{}
+		for _, u := range data.AllUIDs() {
+			unseen[u] = true
+		}
 	}
 	var out []thread
 	if cl.cfg.Threading != "flat" && cl.hasThread(c) {
 		tds, err := c.UIDThread(&imapclient.ThreadOptions{
-			Algorithm:      imap.ThreadReferences,
-			SearchCriteria: crit,
+			Algorithm: imap.ThreadReferences, SearchCriteria: &imap.SearchCriteria{},
 		}).Wait()
 		if err != nil {
 			return nil, err
@@ -395,19 +618,44 @@ func (cl *Client) threads(c *imapclient.Client, unreadOnly bool) ([]thread, erro
 		for _, td := range tds {
 			var uids []imap.UID
 			flattenThread(td, &uids)
-			if len(uids) == 0 {
-				continue
+			if len(uids) > 0 {
+				out = append(out, mkThread(uids))
 			}
-			out = append(out, mkThread(uids))
+		}
+		// "server" is the explicit escape hatch for unmodified RFC 5256.
+		if cl.cfg.Threading != "server" {
+			var set imap.UIDSet
+			for _, t := range out {
+				if len(t.uids) > 1 {
+					set.AddNum(t.uids...)
+				}
+			}
+			if nums, ok := set.Nums(); !ok || len(nums) > 0 {
+				section := &imap.FetchItemBodySection{Specifier: imap.PartSpecifierHeader,
+					HeaderFields: []string{"References", "In-Reply-To", "Auto-Submitted", "List-Id", "Precedence"}, Peek: true}
+				bufs, err := c.Fetch(set, &imap.FetchOptions{UID: true, Envelope: true, InternalDate: true,
+					BodySection: []*imap.FetchItemBodySection{section}}).Collect()
+				if err != nil {
+					return nil, err
+				}
+				meta := make(map[imap.UID]threadMeta, len(bufs))
+				for _, b := range bufs {
+					meta[b.UID] = parseThreadMeta(b, section)
+				}
+				out = splitServerThreads(out, meta, cl.cfg.Threading != "strict")
+			}
 		}
 	} else {
-		data, err := c.UIDSearch(crit, nil).Wait()
+		data, err := c.UIDSearch(&imap.SearchCriteria{}, nil).Wait()
 		if err != nil {
 			return nil, err
 		}
 		for _, u := range data.AllUIDs() {
 			out = append(out, thread{root: u, uids: []imap.UID{u}, maxUID: u})
 		}
+	}
+	if unreadOnly {
+		out = filterThreadsByUID(out, unseen)
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].maxUID > out[j].maxUID })
 	return out, nil
@@ -591,24 +839,38 @@ func structureHasAttachment(bs imap.BodyStructure) bool {
 	return found
 }
 
-var rePrefix = []string{"re:", "sv:", "fwd:", "fw:", "vb:", "aw:"}
+// Reply prefixes are intentionally separate from forward prefixes: forwards
+// are cleaned for display, but must never create a weak conversation link.
+// The list covers the common localized markers seen by our IMAP users; explicit
+// References remain authoritative for every language.
+var subjectPrefixRE = regexp.MustCompile(`(?i)^\s*(re|sv|aw|antw|antwort|odp|res|rif|fwd|fw|vb|wg|vs|enc)\s*(\[\d+\]|\(\d+\))?\s*:\s*`)
+
+func subjectKind(s string) (kind, base string) {
+	kind = ""
+	for {
+		loc := subjectPrefixRE.FindStringSubmatchIndex(s)
+		if loc == nil {
+			break
+		}
+		prefix := strings.ToLower(s[loc[2]:loc[3]])
+		if prefix == "fwd" || prefix == "fw" || prefix == "vb" || prefix == "wg" || prefix == "vs" || prefix == "enc" {
+			kind = "forward"
+		} else if kind != "forward" {
+			kind = "reply"
+		}
+		s = s[loc[1]:]
+	}
+	base = strings.ToLower(strings.Join(strings.Fields(s), " "))
+	return kind, base
+}
 
 func cleanSubject(s string) string {
 	for {
-		trimmed := strings.TrimSpace(s)
-		lower := strings.ToLower(trimmed)
-		cut := false
-		for _, p := range rePrefix {
-			if strings.HasPrefix(lower, p) {
-				trimmed = strings.TrimSpace(trimmed[len(p):])
-				cut = true
-				break
-			}
+		loc := subjectPrefixRE.FindStringIndex(s)
+		if loc == nil {
+			return strings.TrimSpace(s)
 		}
-		s = trimmed
-		if !cut {
-			return s
-		}
+		s = s[loc[1]:]
 	}
 }
 
