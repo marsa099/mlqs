@@ -522,6 +522,8 @@ Singleton {
         try { e = JSON.parse(line) } catch (err) { return }
         if (e.type === "updateAvailable") {
             updateCurrent = e.current || ""; updateLatest = e.latest || ""; updateAvailable = true
+        } else if (e.type === "updateCleared") {
+            updateCurrent = ""; updateLatest = ""; updateAvailable = false
         } else if (e.type === "workspaces") {
             workspaces = e.workspaces || []
             if (currentAccount === "" && workspaces.length > 0)
