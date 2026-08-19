@@ -12,8 +12,21 @@ Modal {
     maxHeightFrac: 0.60
     panelColor: Theme.bg   // pickers/detail panels use bg so selection reads
 
-    function showEvent(e) { if (!e) return; ev = e; show() }
+    property bool attendeesExpanded: false
+    function showEvent(e) { if (!e) return; ev = e; attendeesExpanded = false; show() }
     readonly property var attendees: (ev && ev.attendeesJson) ? JSON.parse(ev.attendeesJson) : []
+    readonly property var acceptedAttendees: attendees.filter(a => a.status === "accepted")
+    // collapsed preview: the ten first accepted people — or, before anyone has
+    // accepted, the ten first invited, so the list never renders empty
+    readonly property var previewAttendees: (acceptedAttendees.length > 0 ? acceptedAttendees : attendees).slice(0, 10)
+    readonly property var visibleAttendees: attendeesExpanded ? attendees : previewAttendees
+
+    onKeyPressed: event => {
+        if (event.key === Qt.Key_A && !(event.modifiers & Qt.ControlModifier)) {
+            attendeesExpanded = !attendeesExpanded
+            event.accepted = true
+        }
+    }
 
     onAccepted: { if (ev && ev.meetLink) Qt.openUrlExternally(ev.meetLink); close() }
 
@@ -41,6 +54,10 @@ Modal {
         KeyCap { visible: em.ev && em.ev.meetLink !== ""; anchors.verticalCenter: parent.verticalCenter; small: true; text: "↵" }
         CapLabel { visible: em.ev && em.ev.meetLink !== ""; anchors.verticalCenter: parent.verticalCenter; text: "join" }
         Item { visible: em.ev && em.ev.meetLink !== ""; width: 10; height: 1 }
+        KeyCap { visible: em.attendees.length > 0; anchors.verticalCenter: parent.verticalCenter; small: true; text: "a" }
+        CapLabel { visible: em.attendees.length > 0; anchors.verticalCenter: parent.verticalCenter
+                   text: em.attendeesExpanded ? "collapse attendees" : "all attendees" }
+        Item { visible: em.attendees.length > 0; width: 10; height: 1 }
         KeyCap { anchors.verticalCenter: parent.verticalCenter; small: true; text: "esc" }
         CapLabel { anchors.verticalCenter: parent.verticalCenter; text: "close" }
     }
@@ -63,31 +80,45 @@ Modal {
             color: Theme.fg_muted; font.family: Theme.fontFamily; font.pixelSize: 12
         }
 
-        // Attendees, each with its RSVP dot (green/yellow/red/hollow).
+        // Compact by default: ten accepted people, wrapping across the available
+        // width. `a` expands all response states without making every person a row.
         Column {
-            width: parent.width; spacing: 4
+            width: parent.width; spacing: 6
             visible: em.attendees.length > 0
-            Repeater {
-                model: em.attendees
-                delegate: Row {
-                    required property var modelData
-                    spacing: 8
-                    Rectangle {
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: 7; height: 7; radius: 3.5
-                        readonly property string st: modelData.status || ""
-                        color: st === "accepted" ? Theme.green
-                             : st === "tentative" ? Theme.yellow
-                             : st === "declined" ? Theme.red : "transparent"
-                        border.width: st === "needsAction" ? 1.2 : 0
-                        border.color: Theme.yellow
-                    }
-                    Text {
-                        text: (modelData.name && modelData.name !== "" ? modelData.name : modelData.email)
-                              + (modelData.self ? " (you)" : "")
-                        color: Theme.fg_muted; font.family: Theme.fontFamily; font.pixelSize: 12
+            Flow {
+                width: parent.width
+                spacing: 12
+                Repeater {
+                    model: em.visibleAttendees
+                    delegate: Row {
+                        required property var modelData
+                        spacing: 5
+                        height: 18
+                        Rectangle {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 7; height: 7; radius: 3.5
+                            readonly property string st: modelData.status || ""
+                            color: st === "accepted" ? Theme.green
+                                 : st === "tentative" ? Theme.yellow
+                                 : st === "declined" ? Theme.red : "transparent"
+                            border.width: st === "needsAction" ? 1.2 : 0
+                            border.color: Theme.yellow
+                        }
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: (modelData.name && modelData.name !== "" ? modelData.name : modelData.email)
+                                  + (modelData.self ? " (you)" : "")
+                            color: Theme.fg_muted; font.family: Theme.fontFamily; font.pixelSize: 12
+                        }
                     }
                 }
+            }
+            Text {
+                visible: em.attendees.length > em.previewAttendees.length
+                text: em.attendeesExpanded ? "show fewer"
+                    : "+" + (em.attendees.length - em.previewAttendees.length) + " more"
+                color: Theme.sky; font.family: Theme.fontFamily; font.pixelSize: 11
+                TapHandler { onTapped: em.attendeesExpanded = !em.attendeesExpanded }
             }
         }
 
