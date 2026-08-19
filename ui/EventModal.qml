@@ -8,8 +8,8 @@ import QsLib
 Modal {
     id: em
     property var ev: null
-    panelWidth: Math.round(Math.min(560, em.width - 100))
-    maxHeightFrac: 0.72
+    panelWidth: Math.round(Math.min(900, em.width - 100))
+    maxHeightFrac: 0.60
     panelColor: Theme.bg   // pickers/detail panels use bg so selection reads
 
     function showEvent(e) { if (!e) return; ev = e; show() }
