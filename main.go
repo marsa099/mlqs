@@ -812,7 +812,7 @@ func msgText(m provider.Message) string {
 
 // bodyPlain returns a message's body as plain text for the LLM: the text/plain
 // part when present, else a crude tag-strip of the HTML, capped.
-func bodyPlain(m provider.Message) string {
+func messagePlain(m provider.Message) string {
 	s := strings.TrimSpace(m.BodyText)
 	if s == "" && m.BodyHTML != "" {
 		s = strings.Join(strings.Fields(stdhtml.UnescapeString(htmlTagRE.ReplaceAllString(m.BodyHTML, " "))), " ")
@@ -820,6 +820,11 @@ func bodyPlain(m provider.Message) string {
 	if s == "" {
 		s = m.Snippet
 	}
+	return s
+}
+
+func bodyPlain(m provider.Message) string {
+	s := messagePlain(m)
 	if len(s) > 4000 {
 		s = s[:4000] + "…"
 	}
@@ -854,7 +859,7 @@ func (d *daemon) handle(conn net.Conn, cmd command) {
 		// warm-start: cached sidebar first (also auto-selects inbox → cached
 		// inbox paint), then the authoritative live list
 		if cached := d.db.CachedFolders(cmd.Account); len(cached) > 0 {
-			d.sendTo(conn, map[string]any{"type": "folders", "account": cmd.Account, "folders": cached})
+			d.sendTo(conn, map[string]any{"type": "folders", "account": cmd.Account, "folders": cached, "cached": true})
 		}
 		fs, err := p.ListFolders(ctx)
 		if err != nil {
@@ -1047,6 +1052,7 @@ func (d *daemon) handle(conn net.Conn, cmd command) {
 				"id": m.ID, "convId": m.ConvID, "from": m.From, "replyTo": m.ReplyTo, "to": m.To, "cc": m.Cc,
 				"subject": m.Subject, "snippet": m.Snippet, "date": m.Date,
 				"unread": m.Unread, "starred": m.Starred, "attachments": atts,
+				"bodyText":  messagePlain(m),
 				"bodyRich":  rich,
 				"hasHtml":   strings.TrimSpace(m.BodyHTML) != "",
 				"hasInvite": hasInvite,

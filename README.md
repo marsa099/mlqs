@@ -285,6 +285,39 @@ mlqs auth work
 
 Tokens land in `~/.local/share/mlqs/tokens/` and auto-refresh.
 
+## Headless CLI
+
+The daemon package includes `mlqs-cli`, a terminal and scripting client for
+mail access without Quickshell or Wayland. Start `mlqs` first, then use:
+
+```sh
+mlqs-cli accounts
+mlqs-cli folders work
+mlqs-cli inbox work
+mlqs-cli read work <conversation-id>
+mlqs-cli search work 'from:person@example.com'
+mlqs-cli send work --to person@example.com --subject 'Hello' --body 'Message'
+mlqs-cli reply work <conversation-id> --body-file reply.txt
+```
+
+`send` and `reply` accept repeated `--attach PATH` options. Use `--body-file -`
+to read a body from stdin. Put global `--json` before the command for stable,
+machine-readable output, and use `--socket PATH` or `MLQS_SOCKET` to override
+the default `$XDG_RUNTIME_DIR/mlqs.sock` (falling back to `/tmp/mlqs.sock`).
+
+Install only the daemon and CLI, without the graphical runtime:
+
+```sh
+nix profile install github:daphen/mlqs#mlqs
+```
+
+For a manual build:
+
+```sh
+go build -o mlqs .
+go build -o mlqs-cli ./cmd/mlqs-cli
+```
+
 ## Run
 
 Nix:
@@ -297,7 +330,8 @@ Manual:
 
 ```
 go build -o mlqs . && ./mlqs &    # daemon (unix socket in $XDG_RUNTIME_DIR)
-QML2_IMPORT_PATH=$PWD/ui/vendor quickshell -p ui/shell.qml   # UI
+go build -o mlqs-cli ./cmd/mlqs-cli
+QML2_IMPORT_PATH=$PWD/ui/vendor quickshell -p ui/shell.qml   # optional UI
 # (the nix wrapper sets this for you; vendored QsLib lives in ui/vendor)
 ```
 

@@ -5,15 +5,19 @@
 
   outputs = { self, nixpkgs }:
     let
-      system = "x86_64-linux";
-      pkgs = import nixpkgs { inherit system; };
+      systems = [ "x86_64-linux" "aarch64-linux" ];
+      forAllSystems = nixpkgs.lib.genAttrs systems;
+    in {
+      packages = forAllSystems (system:
+        let
+          pkgs = import nixpkgs { inherit system; };
 
-      daemon = pkgs.buildGoModule {
+          daemon = pkgs.buildGoModule {
         pname = "mlqs";
         version = "0.1.0";
         src = ./.;
         vendorHash = "sha256-GqJ4Ee7UOiBedaEXfbvOba+EPmozDGil9WwihY+wkt0=";
-        subPackages = [ "." ];
+        subPackages = [ "." "./cmd/mlqs-cli" ];
         # Embed the build's git rev so the daemon can detect newer builds.
         ldflags = [ "-X main.gitRev=${self.rev or ""}" ];
         postInstall = ''
@@ -134,11 +138,10 @@
           exit 1
         '';
       };
-    in {
-      packages.${system} = {
-        mlqs = daemon;
-        mlqs-client = client;
-        default = client;
-      };
+        in {
+          mlqs = daemon;
+          mlqs-client = client;
+          default = client;
+        });
     };
 }
