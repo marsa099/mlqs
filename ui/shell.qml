@@ -17,7 +17,7 @@ FloatingWindow {
     implicitWidth: 1480
     implicitHeight: 950
     // reference layout: flat canvas, panes float as cards on it
-    color: Theme.bg_alt
+    color: Theme.bgDim
 
     component CapGap: Item { width: 8; height: 1 }
 
