@@ -560,9 +560,10 @@ Singleton {
         else delete readGrace[k]
         const i = findRow(id, merged ? a : undefined)
         if (i >= 0) convsModel.setProperty(i, "unread", !read)
-        if (unified) _bumpUnread(a, read ? -1 : 1)
+        const delta = read ? -1 : 1
+        if (unified || currentFolderId === _inboxIdFor(a)) _bumpUnread(a, delta)
         else folders = folders.map(f => f.id === currentFolderId
-            ? Object.assign({}, f, { unread: Math.max(0, (f.unread || 0) + (read ? -1 : 1)) }) : f)
+            ? Object.assign({}, f, { unread: Math.max(0, (f.unread || 0) + delta) }) : f)
     }
 
     // Shift+R in the index: flip a thread's read state (server + local)
