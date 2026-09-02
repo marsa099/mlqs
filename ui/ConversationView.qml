@@ -1252,6 +1252,34 @@ Rectangle {
                     font.pixelSize: 14
                     onLinkActivated: link => cv.openLink(link)
 
+                    function inlineImages() {
+                        const doc = geom.getText(0, geom.length)
+                        const widths = cv._imgWidths(geom)
+                        const srcs = cv._allImgSrcs(geom)
+                        const images = []
+                        let ord = 0
+                        for (let ip = doc.indexOf("\uFFFC"); ip >= 0; ip = doc.indexOf("\uFFFC", ip + 1)) {
+                            const r = geom.positionToRectangle(ip)
+                            const w = cv._objWidth(geom, ip, ord, widths)
+                            if (srcs[ord] && srcs[ord].indexOf("file://") === 0 && w >= 48 && r.height >= 22)
+                                images.push({ x: r.x, y: r.y, w: w, h: r.height, url: srcs[ord] })
+                            ord++
+                        }
+                        return images
+                    }
+
+                    Repeater {
+                        model: bodyText.visible && geom.width > 0 && geom.text.length > 0
+                            ? bodyText.inlineImages() : []
+                        delegate: Item {
+                            required property var modelData
+                            x: modelData.x; y: modelData.y
+                            width: modelData.w; height: modelData.h
+                            HoverHandler { cursorShape: Qt.PointingHandCursor }
+                            TapHandler { onTapped: cv.openTarget(modelData.url) }
+                        }
+                    }
+
                     function computeRects() {
                         if (!(cv.hinting && index === cv.hintIndex)) return
                         const doc = geom.getText(0, geom.length)
