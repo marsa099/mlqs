@@ -18,8 +18,19 @@
         src = ./.;
         vendorHash = "sha256-GqJ4Ee7UOiBedaEXfbvOba+EPmozDGil9WwihY+wkt0=";
         subPackages = [ "." "./cmd/mlqs-cli" ];
-        # Embed the build's git rev so the daemon can detect newer builds.
-        ldflags = [ "-X main.gitRev=${self.rev or ""}" ];
+        # Embed the build's git rev so the daemon can detect newer builds, plus
+        # the repos it polls. This is a FORK build: the NixOS flake pins
+        # marsa099/mlqs, so updateRepo must name the fork and upstreamRepo
+        # daphen — otherwise the daemon falls back to its source default
+        # (updateRepo=daphen/mlqs, upstreamRepo="") and takes the single-leg
+        # checkPlain path, which is plain SHA inequality against daphen's main.
+        # A fork's main can never equal daphen's main, so that path pins the
+        # in-app update badge on permanently: no rebuild or merge can clear it.
+        ldflags = [
+          "-X main.gitRev=${self.rev or ""}"
+          "-X main.updateRepo=marsa099/mlqs"
+          "-X main.upstreamRepo=daphen/mlqs"
+        ];
         postInstall = ''
           mkdir -p $out/share/mlqs
           cp -r ui $out/share/mlqs/ui
