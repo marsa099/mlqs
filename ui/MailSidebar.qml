@@ -199,6 +199,13 @@ Rectangle {
         readonly property bool primary: bar.active && bar.sel === -3
         // an account whose inbox failed to load — the list still shows the rest
         readonly property int failed: Object.keys(Backend.acctError || ({})).length
+        // this row IS the merged inbox, so its count is every account's inbox
+        // unread pooled. Without it the sidebar could hide unread mail entirely:
+        // the account pill only counts the OTHER accounts (and is suppressed in
+        // the merged view), and the Inbox row below is just the current account —
+        // so one unread in a non-current account showed up nowhere.
+        readonly property int totalUnread: Backend.workspaces.reduce(
+            (s, w) => s + (Backend.accountUnread[w.id] || 0), 0)
         Rectangle {
             anchors.fill: parent
             anchors.leftMargin: 6; anchors.rightMargin: 6
@@ -245,6 +252,22 @@ Rectangle {
                 visible: allRow.failed > 0
                 name: "triangle-warning"
                 color: Theme.red
+            }
+        }
+        // loud pill, same treatment as the Inbox row's own count
+        Rectangle {
+            visible: allRow.totalUnread > 0
+            anchors.right: parent.right; anchors.rightMargin: 16
+            anchors.verticalCenter: parent.verticalCenter
+            height: 18; width: Math.max(18, allUb.implicitWidth + 10); radius: 9
+            color: Theme.cursor
+            Text {
+                id: allUb; anchors.fill: parent
+                horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
+                text: allRow.totalUnread > 9999 ? "9999+" : allRow.totalUnread
+                color: Theme.ink
+                font.family: Theme.fontFamily; font.hintingPreference: Font.PreferNoHinting
+                font.pixelSize: 12; font.weight: 500; font.features: ({ "tnum": 1 })
             }
         }
         TapHandler {
