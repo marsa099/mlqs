@@ -1011,20 +1011,19 @@ Rectangle {
             readonly property bool inVisual: cv.cursorMode && index === cv.cursorIndex
             property alias geomEdit: geom
 
-            // the picker cursor verbatim: warm Theme.selection fill + hairpin
-            // (an fg tint reads cold gray and clashes with the family palette)
             readonly property bool multi: Backend.messages.length > 1
             readonly property bool focusedMsg: multi && index === list.currentIndex
             Rectangle {
                 anchors.fill: parent
                 anchors.leftMargin: 10; anchors.rightMargin: 10
                 radius: Theme.radius
-                color: parent.focusedMsg ? Theme.selection : "transparent"
+                color: parent.focusedMsg ? Theme.surface : Theme.surface0
                 border.width: 1
-                // every message keeps a soft outline so thread boundaries read
-                // in long conversations; focus still gets the full accent
-                border.color: parent.focusedMsg ? Theme.hairline
-                             : multi ? Theme.hairlineSoft : "transparent"
+                border.color: parent.focusedMsg
+                            ? Qt.rgba(Theme.fg.r, Theme.fg.g, Theme.fg.b, 0.45)
+                            : Theme.hairlineSoft
+                Behavior on color { ColorAnimation { duration: 120; easing.type: Easing.InOutQuad } }
+                Behavior on border.color { ColorAnimation { duration: 120; easing.type: Easing.InOutQuad } }
             }
             // copy feedback, slqs grammar: flash in sync with the bar morph
             Rectangle {
@@ -1793,11 +1792,12 @@ Rectangle {
             height: Math.min(180, replyInput.implicitHeight + 22)
             radius: Theme.radius
             readonly property bool focused: replyInput.activeFocus
-            color: focused ? Theme.tintFill : Theme.surface
-            border.color: focused ? (Theme.mode === "light" ? Theme.fg : "#FFFFFF") : Theme.hairline
-            border.width: focused ? 1.5 : 1
-            Behavior on color { ColorAnimation { duration: 120 } }
-            Behavior on border.color { ColorAnimation { duration: 120 } }
+            color: Theme.bg
+            border.color: focused
+                ? (Theme.mode === "light" ? Theme.ink : Qt.hsla(0.583, 0.29, 0.90, 1))
+                : Theme.hairline
+            border.width: 2
+            Behavior on border.color { ColorAnimation { duration: 650; easing.type: Easing.InOutQuad } }
 
             Flickable {
                 id: replyFlick

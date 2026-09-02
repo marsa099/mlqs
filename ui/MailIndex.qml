@@ -149,6 +149,7 @@ Rectangle {
                   topMargin: 6; leftMargin: 8; rightMargin: 14; bottomMargin: 14 }
         // concentric with the row pills: pill radius (58/2 = 29) + 14px inset
         radius: 43
+        color: Theme.surface0
         border.width: 1
         border.color: Theme.hairlineSoft
     }
@@ -189,27 +190,22 @@ Rectangle {
             width: list.width; height: 64
             readonly property bool cursor: index === list.currentIndex
             readonly property bool sel: idx.inSel(index)
-            // ink text on the inverted selection pill
-            readonly property color rowFg: sel ? Theme.bg : Theme.fg
-            readonly property color rowFgDim: sel ? Qt.rgba(Theme.bg.r, Theme.bg.g, Theme.bg.b, 0.7) : Theme.fg_muted
 
             // reference-style pill rows in our tokens: unread pops as a raised
-            // card, read sits as a faint tint, visual selection inverts to ink
+            // card, read rests on the surface, and selection carries the accent
             Rectangle {
                 anchors.fill: parent
                 anchors.leftMargin: idx.active ? 42 : 14
                 anchors.rightMargin: 14
                 anchors.topMargin: 3; anchors.bottomMargin: 3
                 radius: height / 2
-                color: row.sel ? Theme.fg
+                color: row.sel ? Theme.surface3
                      : row.cursor && idx.active ? Theme.selection
-                     : row.unread ? (Theme.mode === "light" ? Theme.bg : Theme.surface2)
-                     : Qt.rgba(Theme.fg.r, Theme.fg.g, Theme.fg.b, 0.03)
-                // unread gets a softer hairpin than the cursor ring — presence, not emphasis
-                // cursor needs a strong hairpin — its fill is near-identical to read tint
-                border.width: (row.cursor && idx.active) || row.unread ? 1 : 0
-                border.color: row.cursor && idx.active
-                            ? Qt.rgba(Theme.fg.r, Theme.fg.g, Theme.fg.b, 0.35) : Theme.hairlineSoft
+                     : row.unread ? Theme.surface : Theme.surface0
+                border.width: (row.sel || (row.cursor && idx.active) || row.unread) ? 1 : 0
+                border.color: (row.sel || (row.cursor && idx.active)) ? Theme.hairline : Theme.hairlineSoft
+                Behavior on color { ColorAnimation { duration: 120; easing.type: Easing.InOutQuad } }
+                Behavior on border.color { ColorAnimation { duration: 120; easing.type: Easing.InOutQuad } }
             }
 
             // gutter: rel numbers stay put in visual mode — the range is readable as counts
@@ -231,7 +227,7 @@ Rectangle {
                     visible: cursor
                     anchors.right: parent.right; anchors.rightMargin: 6
                     anchors.verticalCenter: parent.verticalCenter
-                    width: 3; height: 16; radius: 2; color: Theme.cursor
+                    width: 3; height: 16; radius: 2; color: Theme.fg_muted
                 }
             }
 
@@ -241,15 +237,15 @@ Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
                 width: 18; height: 18; radius: 6
                 // solid card-white fill so the box reads on tinted pills too
-                color: row.sel ? Theme.cursor : Theme.bg
+                color: row.sel ? Theme.surface3 : Theme.bg
                 border.width: 1
-                border.color: row.sel ? Theme.cursor : Qt.rgba(Theme.fg.r, Theme.fg.g, Theme.fg.b, 0.25)
+                border.color: row.sel ? Theme.hairline : Qt.rgba(Theme.fg.r, Theme.fg.g, Theme.fg.b, 0.25)
                 Icon {
                     visible: row.sel
                     anchors.centerIn: parent
                     width: 11; height: 11
                     name: "check"
-                    color: Theme.ink
+                    color: Theme.fg
                 }
             }
             // flag only when it says something — starred, cursor, or in the visual range
@@ -261,7 +257,7 @@ Rectangle {
                 width: 14; height: 14
                 name: "flag-7"
                 fill: row.starred ? "glyph" : "outline"
-                color: row.sel ? Theme.bg : row.starred ? Theme.cursor : Theme.fg_muted
+                color: row.starred ? Theme.yellow : Theme.fg_muted
             }
 
             Text {
@@ -270,7 +266,7 @@ Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
                 width: 210
                 text: row.who
-                color: row.sel ? Theme.bg : row.unread ? Theme.fg : Theme.fg_secondary
+                color: row.unread ? Theme.fg : Theme.fg_secondary
                 font.family: Theme.fontFamily
                 font.hintingPreference: Font.PreferNoHinting
                 font.pixelSize: 13
@@ -286,7 +282,7 @@ Rectangle {
                 Text {
                     width: parent.width
                     text: row.subject || "(no subject)"
-                    color: row.sel ? Theme.bg : row.unread ? Theme.fg : Theme.fg_secondary
+                    color: row.unread ? Theme.fg : Theme.fg_secondary
                     font.family: Theme.fontFamily
                     font.hintingPreference: Font.PreferNoHinting
                     font.pixelSize: 13
@@ -303,7 +299,7 @@ Rectangle {
                     // gmail snippets arrive HTML-entity-encoded
                     text: (row.snippet || "").replace(/[\n\r]+/g, " ").replace(/&#39;/g, "'").replace(/&quot;/g, '"')
                         .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&")
-                    color: row.sel ? Qt.rgba(Theme.bg.r, Theme.bg.g, Theme.bg.b, 0.7) : Theme.fg_muted
+                    color: Theme.fg_muted
                     font.family: Theme.fontFamily
                     font.hintingPreference: Font.PreferNoHinting
                     font.pixelSize: 12
@@ -320,7 +316,7 @@ Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
                 visible: Backend.merged && text !== ""
                 text: row.account || ""
-                color: row.sel ? Qt.rgba(Theme.bg.r, Theme.bg.g, Theme.bg.b, 0.75) : Theme.fg_muted
+                color: Theme.fg_muted
                 font.family: Theme.fontFamily; font.pixelSize: 11
             }
 
@@ -330,7 +326,7 @@ Rectangle {
                 anchors.rightMargin: acctText.visible ? 12 : 30
                 anchors.verticalCenter: parent.verticalCenter
                 text: row.dateStr
-                color: row.sel ? Qt.rgba(Theme.bg.r, Theme.bg.g, Theme.bg.b, 0.75) : Theme.fg_muted
+                color: Theme.fg_muted
                 font.family: Theme.fontFamily; font.pixelSize: 12
                 font.features: ({ "tnum": 1 })
             }

@@ -2,8 +2,8 @@ import QtQuick
 import "."
 import QsLib
 
-// Folder sidebar in the chat clients' visual language: inverted ink-pill
-// cursor, faint tint on the open folder, loud/quiet unread hierarchy.
+// Folder sidebar in the chat clients' visual language: neutral cursor,
+// stepped open-folder surface, loud/quiet unread hierarchy.
 Rectangle {
     id: bar
     signal composeRequested()
@@ -12,8 +12,8 @@ Rectangle {
     // rather than fighting the sidebar's own stacking.
     signal accountMenuRequested()
     property alias accountAnchor: acctTrigger
-    // sits directly on the window canvas — no own surface, no divider
-    color: "transparent"
+    // sits directly on the outer ground — no divider
+    color: Theme.bgDim
     property bool active: false
     property int sel: 0
     opacity: active ? 1.0 : 0.8
@@ -203,16 +203,18 @@ Rectangle {
             anchors.fill: parent
             anchors.leftMargin: 6; anchors.rightMargin: 6
             radius: height / 2
-            color: allRow.primary ? Theme.fg
-                 : (allRow.isOpen && !bar.active ? Qt.rgba(Theme.fg.r, Theme.fg.g, Theme.fg.b, 0.06)
-                           : hovA.hovered ? Qt.rgba(Theme.fg.r, Theme.fg.g, Theme.fg.b, 0.04) : "transparent")
+            color: allRow.primary ? Theme.surface
+                 : allRow.isOpen ? Theme.surface1
+                 : hovA.hovered ? Theme.surface : "transparent"
+            border.width: allRow.primary ? 1 : 0
+            border.color: Qt.rgba(Theme.fg.r, Theme.fg.g, Theme.fg.b, 0.45)
         }
         HoverHandler { id: hovA }
         Rectangle {
             visible: bar.active && bar.sel === -3
             anchors.left: parent.left; anchors.leftMargin: 20
             anchors.verticalCenter: parent.verticalCenter
-            width: 3; height: 16; radius: 2; color: Theme.cursor
+            width: 3; height: 16; radius: 2; color: Theme.fg_muted
         }
         JumpCap {
             cap: "gu"; onInk: allRow.primary
@@ -228,14 +230,12 @@ Rectangle {
                 width: 18; height: 18
                 anchors.verticalCenter: parent.verticalCenter
                 name: "inbox-arrow-down"
-                color: allRow.primary ? Theme.bg
-                     : (allRow.isOpen || bar.sel === -3) ? Theme.fg : Theme.fg_muted
+                color: (allRow.primary || allRow.isOpen || bar.sel === -3) ? Theme.fg : Theme.fg_muted
             }
             Text {
                 anchors.verticalCenter: parent.verticalCenter
                 text: "All accounts"
-                color: allRow.primary ? Theme.bg
-                     : (allRow.isOpen || bar.sel === -3) ? Theme.fg : Theme.dimmedFg
+                color: (allRow.primary || allRow.isOpen || bar.sel === -3) ? Theme.fg : Theme.dimmedFg
                 font.family: Theme.fontFamily; font.hintingPreference: Font.PreferNoHinting
                 font.pixelSize: 14
             }
@@ -244,7 +244,7 @@ Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
                 visible: allRow.failed > 0
                 name: "triangle-warning"
-                color: allRow.primary ? Theme.bg : Theme.red
+                color: Theme.red
             }
         }
         TapHandler {
@@ -262,16 +262,18 @@ Rectangle {
             anchors.fill: parent
             anchors.leftMargin: 6; anchors.rightMargin: 6
             radius: height / 2
-            color: threadsRow.primary ? Theme.fg
-                 : (threadsRow.isOpen && !bar.active ? Qt.rgba(Theme.fg.r, Theme.fg.g, Theme.fg.b, 0.06)
-                           : hovT.hovered ? Qt.rgba(Theme.fg.r, Theme.fg.g, Theme.fg.b, 0.04) : "transparent")
+            color: threadsRow.primary ? Theme.surface
+                 : threadsRow.isOpen ? Theme.surface1
+                 : hovT.hovered ? Theme.surface : "transparent"
+            border.width: threadsRow.primary ? 1 : 0
+            border.color: Qt.rgba(Theme.fg.r, Theme.fg.g, Theme.fg.b, 0.45)
         }
         HoverHandler { id: hovT }
         Rectangle {
             visible: bar.active && bar.sel === -2
             anchors.left: parent.left; anchors.leftMargin: 20
             anchors.verticalCenter: parent.verticalCenter
-            width: 3; height: 16; radius: 2; color: Theme.cursor
+            width: 3; height: 16; radius: 2; color: Theme.fg_muted
         }
         JumpCap {
             cap: "T"; onInk: threadsRow.primary
@@ -287,14 +289,12 @@ Rectangle {
                 width: 18; height: 18
                 anchors.verticalCenter: parent.verticalCenter
                 name: "msgs"
-                color: threadsRow.primary ? Theme.bg
-                     : (threadsRow.isOpen || bar.sel === -2) ? Theme.fg : Theme.fg_muted
+                color: (threadsRow.primary || threadsRow.isOpen || bar.sel === -2) ? Theme.fg : Theme.fg_muted
             }
             Text {
                 anchors.verticalCenter: parent.verticalCenter
                 text: "Threads"
-                color: threadsRow.primary ? Theme.bg
-                     : (threadsRow.isOpen || bar.sel === -2) ? Theme.fg : Theme.dimmedFg
+                color: (threadsRow.primary || threadsRow.isOpen || bar.sel === -2) ? Theme.fg : Theme.dimmedFg
                 font.family: Theme.fontFamily; font.hintingPreference: Font.PreferNoHinting
                 font.pixelSize: 14
             }
@@ -315,16 +315,18 @@ Rectangle {
             anchors.fill: parent
             anchors.leftMargin: 6; anchors.rightMargin: 6
             radius: height / 2
-            color: calRow.primary ? Theme.fg
-                 : (calRow.isOpen && !bar.active ? Qt.rgba(Theme.fg.r, Theme.fg.g, Theme.fg.b, 0.06)
-                           : hovC.hovered ? Qt.rgba(Theme.fg.r, Theme.fg.g, Theme.fg.b, 0.04) : "transparent")
+            color: calRow.primary ? Theme.surface
+                 : calRow.isOpen ? Theme.surface1
+                 : hovC.hovered ? Theme.surface : "transparent"
+            border.width: calRow.primary ? 1 : 0
+            border.color: Qt.rgba(Theme.fg.r, Theme.fg.g, Theme.fg.b, 0.45)
         }
         HoverHandler { id: hovC }
         Rectangle {
             visible: bar.active && bar.sel === -1
             anchors.left: parent.left; anchors.leftMargin: 20
             anchors.verticalCenter: parent.verticalCenter
-            width: 3; height: 16; radius: 2; color: Theme.cursor
+            width: 3; height: 16; radius: 2; color: Theme.fg_muted
         }
         JumpCap {
             cap: "C"; onInk: calRow.primary
@@ -340,14 +342,12 @@ Rectangle {
                 width: 18; height: 18
                 anchors.verticalCenter: parent.verticalCenter
                 name: "calendar-days"
-                color: calRow.primary ? Theme.bg
-                     : (calRow.isOpen || bar.sel === -1) ? Theme.fg : Theme.fg_muted
+                color: (calRow.primary || calRow.isOpen || bar.sel === -1) ? Theme.fg : Theme.fg_muted
             }
             Text {
                 anchors.verticalCenter: parent.verticalCenter
                 text: "Calendar"
-                color: calRow.primary ? Theme.bg
-                     : (calRow.isOpen || bar.sel === -1) ? Theme.fg : Theme.dimmedFg
+                color: (calRow.primary || calRow.isOpen || bar.sel === -1) ? Theme.fg : Theme.dimmedFg
                 font.family: Theme.fontFamily; font.hintingPreference: Font.PreferNoHinting
                 font.pixelSize: 14
             }
@@ -423,9 +423,11 @@ Rectangle {
                 anchors.fill: parent
                 anchors.leftMargin: 6; anchors.rightMargin: 6
                 radius: height / 2
-                color: row.primary ? Theme.fg
-                     : (row.isOpen && !bar.active ? Qt.rgba(Theme.fg.r, Theme.fg.g, Theme.fg.b, 0.06)
-                               : hov.hovered ? Qt.rgba(Theme.fg.r, Theme.fg.g, Theme.fg.b, 0.04) : "transparent")
+                color: row.primary ? Theme.surface
+                     : row.isOpen ? Theme.surface1
+                     : hov.hovered ? Theme.surface : "transparent"
+                border.width: row.primary ? 1 : 0
+                border.color: Qt.rgba(Theme.fg.r, Theme.fg.g, Theme.fg.b, 0.45)
             }
             HoverHandler { id: hov }
 
@@ -441,7 +443,7 @@ Rectangle {
                 visible: bar.active && row.cursor
                 anchors.left: parent.left; anchors.leftMargin: 20
                 anchors.verticalCenter: parent.verticalCenter
-                width: 3; height: 16; radius: 2; color: Theme.cursor
+                width: 3; height: 16; radius: 2; color: Theme.fg_muted
             }
 
             Row {
@@ -454,8 +456,7 @@ Rectangle {
                     width: 18; height: 18
                     anchors.verticalCenter: parent.verticalCenter
                     name: bar.roleIcon[modelData.role] || "tag"
-                    color: row.primary ? Theme.bg
-                         : (row.emphasize || row.isOpen || row.cursor) ? Theme.fg : Theme.fg_muted
+                    color: (row.primary || row.emphasize || row.isOpen || row.cursor) ? Theme.fg : Theme.fg_muted
                 }
                 Text {
                     anchors.verticalCenter: parent.verticalCenter
@@ -463,8 +464,7 @@ Rectangle {
                     text: modelData.role === "label" ? modelData.name
                         : (modelData.name.charAt(0) + modelData.name.slice(1).toLowerCase())
                     elide: Text.ElideRight
-                    color: row.primary ? Theme.bg
-                         : (row.emphasize || row.isOpen || row.cursor) ? Theme.fg : Theme.dimmedFg
+                    color: (row.primary || row.emphasize || row.isOpen || row.cursor) ? Theme.fg : Theme.dimmedFg
                     font.family: Theme.fontFamily; font.hintingPreference: Font.PreferNoHinting
                     font.pixelSize: 14
                     font.weight: row.emphasize ? 500 : Theme.fontWeight
@@ -493,7 +493,7 @@ Rectangle {
                 anchors.right: parent.right; anchors.rightMargin: 22
                 anchors.verticalCenter: parent.verticalCenter
                 text: modelData.unread
-                color: row.primary ? Theme.bg : Theme.fg_muted
+                color: row.primary ? Theme.fg : Theme.fg_muted
                 font.family: Theme.fontFamily; font.hintingPreference: Font.PreferNoHinting
                 font.pixelSize: 12; font.features: ({ "tnum": 1 })
             }
