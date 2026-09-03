@@ -197,15 +197,10 @@ Rectangle {
         height: 42
         readonly property bool isOpen: Backend.unified
         readonly property bool primary: bar.active && bar.sel === -3
+        readonly property int unread: Backend.workspaces.reduce((n, w) =>
+            n + (Backend.accountUnread[w.id] || 0), 0)
         // an account whose inbox failed to load — the list still shows the rest
         readonly property int failed: Object.keys(Backend.acctError || ({})).length
-        // this row IS the merged inbox, so its count is every account's inbox
-        // unread pooled. Without it the sidebar could hide unread mail entirely:
-        // the account pill only counts the OTHER accounts (and is suppressed in
-        // the merged view), and the Inbox row below is just the current account —
-        // so one unread in a non-current account showed up nowhere.
-        readonly property int totalUnread: Backend.workspaces.reduce(
-            (s, w) => s + (Backend.accountUnread[w.id] || 0), 0)
         Rectangle {
             anchors.fill: parent
             anchors.leftMargin: 6; anchors.rightMargin: 6
@@ -232,6 +227,7 @@ Rectangle {
         Row {
             anchors.fill: parent
             anchors.leftMargin: 36
+            anchors.rightMargin: allRow.unread > 0 ? 54 : 8
             spacing: 13
             Icon {
                 width: 18; height: 18
@@ -254,17 +250,16 @@ Rectangle {
                 color: Theme.red
             }
         }
-        // loud pill, same treatment as the Inbox row's own count
         Rectangle {
-            visible: allRow.totalUnread > 0
+            visible: allRow.unread > 0
             anchors.right: parent.right; anchors.rightMargin: 16
             anchors.verticalCenter: parent.verticalCenter
-            height: 18; width: Math.max(18, allUb.implicitWidth + 10); radius: 9
+            height: 18; width: Math.max(18, allUnread.implicitWidth + 10); radius: 9
             color: Theme.cursor
             Text {
-                id: allUb; anchors.fill: parent
+                id: allUnread; anchors.fill: parent
                 horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
-                text: allRow.totalUnread > 9999 ? "9999+" : allRow.totalUnread
+                text: allRow.unread > 9999 ? "9999+" : allRow.unread
                 color: Theme.ink
                 font.family: Theme.fontFamily; font.hintingPreference: Font.PreferNoHinting
                 font.pixelSize: 12; font.weight: 500; font.features: ({ "tnum": 1 })

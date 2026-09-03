@@ -48,6 +48,10 @@
           # QsLib resolution: a locally-managed design system (dotfiles) wins;
           # everyone else falls back to the vendored snapshot in the package
           export QML2_IMPORT_PATH="$HOME/.local/share/qml:${daemon}/share/mlqs/ui/vendor''${QML2_IMPORT_PATH:+:$QML2_IMPORT_PATH}"
+          # In-app ⇧U apply step. Set unconditionally so it wins over any inherited
+          # value (niri exports a Discord-updater default for the sibling clients).
+          # This is fork-specific wiring — daphen's build leaves SLK_UPDATE_CMD unset.
+          export SLK_UPDATE_CMD="kitty --hold -e $HOME/.scripts/update-dsqrd mlqs"
           # niri (the mapped-window check below) lives in the system profile, not
           # this wrapper's runtimeInputs — make it reachable on direct invocation.
           export PATH="/run/current-system/sw/bin:$PATH"

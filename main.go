@@ -1583,7 +1583,7 @@ func openMedia(path string) {
 	case ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp":
 		viewer := os.Getenv("SLK_MEDIA_VIEWER")
 		if viewer == "" {
-			viewer = filepath.Join(os.Getenv("HOME"), ".config", "endcord", "media-viewer.sh")
+			viewer = filepath.Join(os.Getenv("HOME"), ".config", "qs-chat-clients", "media-viewer.sh")
 		}
 		if _, err := os.Stat(viewer); err != nil {
 			// no family viewer on this machine — plain xdg-open works fine

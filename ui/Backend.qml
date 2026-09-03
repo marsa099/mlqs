@@ -534,14 +534,11 @@ Singleton {
         send({ type: "conversation", account: acct, id: row.tid })
     }
 
-    // Adjust one (account, folder) unread count. The account is explicit because
-    // reading a `work` row in the merged list must not decrement whichever
-    // account happened to be selected. accountUnread — the per-account inbox
-    // tally behind the account-pill and All-accounts badges — is kept in step
-    // whenever the touched folder IS that account's inbox. Callers must go
-    // through here: patching `folders` alone left accountUnread stale until the
-    // next `folders` event, so the badges kept advertising already-read mail.
-    function _bumpFolderUnread(acct, fid, delta) {
+    // Adjust one account's inbox unread count. Without the account, reading a
+    // `work` row in the merged list would decrement whichever account happened to
+    // be selected.
+    function _bumpUnread(acct, delta) {
+        const fid = _inboxIdFor(acct)
         if (fid !== "") {
             const fm = Object.assign({}, foldersByAccount)
             fm[acct] = (fm[acct] || []).map(f => f.id === fid
@@ -551,17 +548,9 @@ Singleton {
                 folders = folders.map(f => f.id === fid
                     ? Object.assign({}, f, { unread: Math.max(0, (f.unread || 0) + delta) }) : f)
         }
-        if (fid === _inboxIdFor(acct)) {
-            const am = Object.assign({}, accountUnread)
-            am[acct] = Math.max(0, (am[acct] || 0) + delta)
-            accountUnread = am
-        }
-    }
-
-    // The folder the given account's rows live in right now: the merged view
-    // spans every account's inbox, an inline view is just the open folder.
-    function _activeFolderFor(acct) {
-        return unified ? _inboxIdFor(acct) : currentFolderId
+        const am = Object.assign({}, accountUnread)
+        am[acct] = Math.max(0, (am[acct] || 0) + delta)
+        accountUnread = am
     }
 
     function setLocalRead(id, read, acct) {
@@ -571,7 +560,10 @@ Singleton {
         else delete readGrace[k]
         const i = findRow(id, merged ? a : undefined)
         if (i >= 0) convsModel.setProperty(i, "unread", !read)
-        _bumpFolderUnread(a, _activeFolderFor(a), read ? -1 : 1)
+        const delta = read ? -1 : 1
+        if (unified || currentFolderId === _inboxIdFor(a)) _bumpUnread(a, delta)
+        else folders = folders.map(f => f.id === currentFolderId
+            ? Object.assign({}, f, { unread: Math.max(0, (f.unread || 0) + delta) }) : f)
     }
 
     // Shift+R in the index: flip a thread's read state (server + local)
@@ -679,7 +671,11 @@ Singleton {
             const visible = lr.folderId === currentFolderId && (merged || acct === currentAccount)
             if (visible) {
                 convsModel.insert(Math.min(it.idx, convsModel.count), it.row)
-                if (it.row.unread) _bumpFolderUnread(acct, _activeFolderFor(acct), 1)
+                if (it.row.unread) {
+                    if (unified) _bumpUnread(acct, 1)
+                    else folders = folders.map(f => f.id === currentFolderId
+                        ? Object.assign({}, f, { unread: (f.unread || 0) + 1 }) : f)
+                }
             }
         }
         toast((items.length > 1 ? items.length + " " : "") + (lr.kind === "trash" ? "restored from trash" : "restored to inbox"))
@@ -689,7 +685,11 @@ Singleton {
         const a = acct || currentAccount
         const i = findRow(id, merged ? a : undefined)
         if (i >= 0) {
-            if (convsModel.get(i).unread) _bumpFolderUnread(a, _activeFolderFor(a), -1)
+            if (convsModel.get(i).unread) {
+                if (unified) _bumpUnread(a, -1)
+                else folders = folders.map(f => f.id === currentFolderId
+                    ? Object.assign({}, f, { unread: Math.max(0, (f.unread || 0) - 1) }) : f)
+            }
             convsModel.remove(i)
         }
         // drop the raw row too, or the next merge rebuild resurrects it

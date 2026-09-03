@@ -341,7 +341,7 @@ Rectangle {
     function openTarget(url) {
         if (url.indexOf("file://") === 0) {
             const viewer = Quickshell.env("SLK_MEDIA_VIEWER")
-                        || (Quickshell.env("HOME") + "/.config/endcord/media-viewer.sh")
+                        || (Quickshell.env("HOME") + "/.config/qs-chat-clients/media-viewer.sh")
             Quickshell.execDetached([viewer, url.slice(7), "img"])
             return
         }
