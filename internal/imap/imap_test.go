@@ -1,10 +1,15 @@
 package imap
 
 import (
+	"bytes"
+	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/emersion/go-imap/v2"
+	gomail "github.com/emersion/go-message/mail"
 
 	"mlqs/internal/provider"
 )
@@ -38,6 +43,79 @@ func TestBuildMIMENoBccHeader(t *testing.T) {
 	got := recipients(d)
 	if !contains(got, "secret@example.com") {
 		t.Fatalf("bcc missing from SMTP envelope: %v", got)
+	}
+}
+
+func TestBuildMIMEAttachmentContentType(t *testing.T) {
+	payload := []byte("%PDF-1.4\nhello\n%%EOF\n")
+	tests := []struct {
+		name        string
+		extension   string
+		contentType string
+	}{
+		{name: "pdf", extension: ".pdf", contentType: "application/pdf"},
+		{name: "uppercase pdf", extension: ".PDF", contentType: "application/pdf"},
+		{name: "unknown", extension: ".mlqs-unknown", contentType: "application/octet-stream"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			filename := "attachment" + tt.extension
+			path := filepath.Join(t.TempDir(), filename)
+			if err := os.WriteFile(path, payload, 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			cl := &Client{cfg: Config{Email: "me@example.com"}}
+			raw, err := cl.buildMIME(provider.Draft{
+				To:              []provider.Address{{Email: "to@example.com"}},
+				Subject:         "attachment",
+				BodyText:        "body",
+				AttachmentPaths: []string{path},
+			}, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			mr, err := gomail.CreateReader(bytes.NewReader(raw))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for {
+				part, err := mr.NextPart()
+				if err != nil {
+					t.Fatalf("attachment not found: %v", err)
+				}
+				ah, ok := part.Header.(*gomail.AttachmentHeader)
+				if !ok {
+					_, _ = io.Copy(io.Discard, part.Body)
+					continue
+				}
+				contentType, _, err := ah.ContentType()
+				if err != nil {
+					t.Fatal(err)
+				}
+				if contentType != tt.contentType {
+					t.Fatalf("Content-Type = %q, want %q", contentType, tt.contentType)
+				}
+				gotFilename, _ := ah.Filename()
+				if gotFilename != filename {
+					t.Fatalf("filename = %q, want %q", gotFilename, filename)
+				}
+				disposition, _, _ := ah.ContentDisposition()
+				if disposition != "attachment" {
+					t.Fatalf("disposition = %q, want attachment", disposition)
+				}
+				gotPayload, err := io.ReadAll(part.Body)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !bytes.Equal(gotPayload, payload) {
+					t.Fatalf("decoded payload = %q, want %q", gotPayload, payload)
+				}
+				return
+			}
+		})
 	}
 }
 

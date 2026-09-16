@@ -2007,8 +2007,56 @@ Rectangle {
 
     Text {
         anchors.centerIn: parent
-        visible: list.count === 0
+        visible: list.count === 0 && Backend.conversationLoading
+            && Backend.authRequiredAccount === ""
         text: "loading…"
         color: Theme.fg_muted; font.family: Theme.fontFamily; font.pixelSize: 13
+    }
+
+    Column {
+        anchors.centerIn: parent
+        visible: list.count === 0 && Backend.authRequiredAccount !== ""
+        spacing: 14
+
+        Text {
+            anchors.horizontalCenter: parent.horizontalCenter
+            text: Backend.authWaiting ? "Waiting for sign-in…" : Backend.conversationError
+            color: Theme.fg
+            font.family: Theme.fontFamily
+            font.pixelSize: 15
+            font.weight: Theme.fontWeight
+        }
+        Text {
+            anchors.horizontalCenter: parent.horizontalCenter
+            text: Backend.authWaiting
+                ? "Complete sign-in in your browser  ·  Esc to cancel"
+                : "Press Enter to sign in again  ·  Esc to go back"
+            color: Theme.fg_muted
+            font.family: Theme.fontFamily
+            font.pixelSize: 12
+        }
+        Rectangle {
+            anchors.horizontalCenter: parent.horizontalCenter
+            visible: !Backend.authWaiting
+            width: signInRow.implicitWidth + 20
+            height: 32
+            radius: 8
+            color: Theme.itemSelected
+
+            Row {
+                id: signInRow
+                anchors.centerIn: parent
+                spacing: 8
+                KeyCap { anchors.verticalCenter: parent.verticalCenter; text: "↵" }
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "Sign in again"
+                    color: Theme.fg
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 12
+                }
+            }
+            TapHandler { onTapped: Backend.startReauth() }
+        }
     }
 }

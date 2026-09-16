@@ -18,8 +18,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
 	"net/mail"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -1663,6 +1665,11 @@ func (cl *Client) buildMIME(d provider.Draft, inReplyTo string) ([]byte, error) 
 		}
 		var ah gomail.AttachmentHeader
 		ah.SetFilename(baseName(path))
+		contentType := mime.TypeByExtension(filepath.Ext(path))
+		if contentType == "" {
+			contentType = "application/octet-stream"
+		}
+		ah.Set("Content-Type", contentType)
 		aw, err := mw.CreateAttachment(ah)
 		if err != nil {
 			return nil, err

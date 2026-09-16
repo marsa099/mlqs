@@ -522,6 +522,53 @@ Singleton {
     // from HERE, not currentAccount, or a reply from a merged list sends from the
     // wrong mailbox
     property string openConvAccount: ""
+    property bool conversationLoading: false
+    property string conversationError: ""
+    property string authRequiredAccount: ""
+    property string authRequiredConversation: ""
+    readonly property bool authWaiting: reauth.running
+
+    function accountLabel(id) {
+        const w = workspaces.find(x => x.id === id)
+        const label = w ? (w.name || w.id || w.email || id) : id
+        return label.length ? label.charAt(0).toUpperCase() + label.slice(1) : "Account"
+    }
+    function startReauth() {
+        if (authRequiredAccount === "" || reauth.running) return
+        conversationError = ""
+        reauth.running = true
+    }
+    function dismissReauth() {
+        if (reauth.running) reauth.running = false
+        authRequiredAccount = ""
+        authRequiredConversation = ""
+        conversationError = ""
+        conversationLoading = false
+        closeConv()
+    }
+    function _reauthFinished(code) {
+        if (authRequiredAccount === "") return
+        if (code !== 0) {
+            conversationError = "Sign-in was not completed."
+            return
+        }
+        const account = authRequiredAccount
+        const id = authRequiredConversation
+        authRequiredAccount = ""
+        authRequiredConversation = ""
+        if (id === "") return
+        openConvId = id
+        openConvAccount = account
+        conversationError = ""
+        conversationLoading = true
+        send({ type: "conversation", account: account, id: id })
+    }
+
+    Process {
+        id: reauth
+        command: ["mlqs", "auth", backend.authRequiredAccount]
+        onExited: (code, status) => backend._reauthFinished(code)
+    }
 
     function openConv(row) {
         if (!row || !row.tid) return
@@ -530,6 +577,10 @@ Singleton {
         openConvAccount = acct
         openConvSubject = row.subject || "(no subject)"
         messages = []
+        conversationLoading = true
+        conversationError = ""
+        authRequiredAccount = ""
+        authRequiredConversation = ""
         pendingRead = row.unread ? row.tid : ""
         send({ type: "conversation", account: acct, id: row.tid })
     }
@@ -575,7 +626,11 @@ Singleton {
         setLocalRead(row.tid, read, acct)
     }
 
-    function closeConv() { openConvId = ""; openConvAccount = ""; messages = [] }
+    function closeConv() {
+        openConvId = ""; openConvAccount = ""; messages = []
+        conversationLoading = false; conversationError = ""
+        authRequiredAccount = ""; authRequiredConversation = ""
+    }
 
     function toggleStar(row) {
         if (!row || !row.tid) return
@@ -1118,11 +1173,23 @@ Singleton {
         } else if (e.type === "conversation") {
             if (e.id === openConvId) {
                 messages = e.messages || []
+                conversationLoading = false
+                conversationError = ""
+                authRequiredAccount = ""
+                authRequiredConversation = ""
                 if (pendingRead === e.id) {
                     send({ type: "markread", account: e.account || openConvAccount, id: e.id })
                     setLocalRead(e.id, true, e.account || openConvAccount)
                     pendingRead = ""
                 }
+            }
+        } else if (e.type === "authRequired") {
+            if (e.operation === "conversation" && e.id === openConvId
+                    && e.account === (openConvAccount || currentAccount)) {
+                conversationLoading = false
+                authRequiredAccount = e.account
+                authRequiredConversation = e.id
+                conversationError = "Your " + accountLabel(e.account) + " session expired."
             }
         } else if (e.type === "convUpdated") {
             if (!e.conv) return

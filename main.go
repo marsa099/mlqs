@@ -13,6 +13,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	stdhtml "html"
 	"io"
@@ -42,6 +43,7 @@ import (
 	"mlqs/internal/sanitize"
 	"mlqs/internal/summarize"
 
+	"golang.org/x/oauth2"
 	"golang.org/x/term"
 )
 
@@ -852,6 +854,14 @@ func (d *daemon) handle(conn net.Conn, cmd command) {
 
 	fail := func(err error) {
 		debuglog.API("%s %s: %v", cmd.Type, cmd.Account, err)
+		var re *oauth2.RetrieveError
+		if errors.As(err, &re) && re.ErrorCode == "invalid_grant" {
+			d.sendTo(conn, map[string]any{
+				"type": "authRequired", "account": cmd.Account,
+				"operation": cmd.Type, "id": cmd.ID,
+			})
+			return
+		}
 		d.sendTo(conn, map[string]any{"type": "toast", "text": fmt.Sprintf("mlqs %s: %v", cmd.Type, err)})
 	}
 	switch cmd.Type {
@@ -1255,6 +1265,12 @@ func (d *daemon) handle(conn net.Conn, cmd command) {
 		if err := p.Send(ctx, draft); err != nil {
 			fail(err)
 			return
+		}
+		now := time.Now().Unix()
+		for _, recipients := range [][]provider.Address{draft.To, draft.Cc, draft.Bcc} {
+			for _, recipient := range recipients {
+				d.db.UpsertContact(cmd.Account, recipient.Email, recipient.Name, now)
+			}
 		}
 		d.sendTo(conn, map[string]any{"type": "sent", "account": cmd.Account, "conv": cmd.Conv})
 	case "agenda":

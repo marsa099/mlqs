@@ -200,10 +200,10 @@ Rectangle {
                 anchors.topMargin: 3; anchors.bottomMargin: 3
                 radius: height / 2
                 color: row.sel ? Theme.surface3
-                     : row.cursor && idx.active ? Theme.selection
+                     : row.cursor && idx.active ? Theme.itemCursor
                      : row.unread ? Theme.surface : Theme.surface0
-                border.width: (row.sel || (row.cursor && idx.active) || row.unread) ? 1 : 0
-                border.color: (row.sel || (row.cursor && idx.active)) ? Theme.hairline : Theme.hairlineSoft
+                border.width: row.unread ? 1 : 0
+                border.color: Theme.hairlineSoft
                 Behavior on color { ColorAnimation { duration: 120; easing.type: Easing.InOutQuad } }
                 Behavior on border.color { ColorAnimation { duration: 120; easing.type: Easing.InOutQuad } }
             }

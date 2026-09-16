@@ -177,10 +177,8 @@ Rectangle {
                 anchors.rightMargin: 8
                 anchors.topMargin: 3; anchors.bottomMargin: 3
                 radius: height / 2
-                color: row.cursor && cal.active ? Theme.selection
+                color: row.cursor && cal.active ? Theme.itemCursor
                      : Qt.rgba(Theme.fg.r, Theme.fg.g, Theme.fg.b, 0.03)
-                border.width: row.cursor && cal.active ? 1 : 0
-                border.color: Qt.rgba(Theme.fg.r, Theme.fg.g, Theme.fg.b, 0.35)
             }
 
             Item {

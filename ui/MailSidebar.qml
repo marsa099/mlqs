@@ -205,11 +205,9 @@ Rectangle {
             anchors.fill: parent
             anchors.leftMargin: 6; anchors.rightMargin: 6
             radius: height / 2
-            color: allRow.primary ? Theme.surface
-                 : allRow.isOpen ? Theme.surface1
-                 : hovA.hovered ? Theme.surface : "transparent"
-            border.width: allRow.primary ? 1 : 0
-            border.color: Qt.rgba(Theme.fg.r, Theme.fg.g, Theme.fg.b, 0.45)
+            color: allRow.primary ? Theme.itemCursor
+                 : allRow.isOpen ? Theme.itemSelected
+                 : hovA.hovered ? Theme.itemHover : "transparent"
         }
         HoverHandler { id: hovA }
         Rectangle {
@@ -280,11 +278,9 @@ Rectangle {
             anchors.fill: parent
             anchors.leftMargin: 6; anchors.rightMargin: 6
             radius: height / 2
-            color: threadsRow.primary ? Theme.surface
-                 : threadsRow.isOpen ? Theme.surface1
-                 : hovT.hovered ? Theme.surface : "transparent"
-            border.width: threadsRow.primary ? 1 : 0
-            border.color: Qt.rgba(Theme.fg.r, Theme.fg.g, Theme.fg.b, 0.45)
+            color: threadsRow.primary ? Theme.itemCursor
+                 : threadsRow.isOpen ? Theme.itemSelected
+                 : hovT.hovered ? Theme.itemHover : "transparent"
         }
         HoverHandler { id: hovT }
         Rectangle {
@@ -333,11 +329,9 @@ Rectangle {
             anchors.fill: parent
             anchors.leftMargin: 6; anchors.rightMargin: 6
             radius: height / 2
-            color: calRow.primary ? Theme.surface
-                 : calRow.isOpen ? Theme.surface1
-                 : hovC.hovered ? Theme.surface : "transparent"
-            border.width: calRow.primary ? 1 : 0
-            border.color: Qt.rgba(Theme.fg.r, Theme.fg.g, Theme.fg.b, 0.45)
+            color: calRow.primary ? Theme.itemCursor
+                 : calRow.isOpen ? Theme.itemSelected
+                 : hovC.hovered ? Theme.itemHover : "transparent"
         }
         HoverHandler { id: hovC }
         Rectangle {
@@ -441,11 +435,9 @@ Rectangle {
                 anchors.fill: parent
                 anchors.leftMargin: 6; anchors.rightMargin: 6
                 radius: height / 2
-                color: row.primary ? Theme.surface
-                     : row.isOpen ? Theme.surface1
-                     : hov.hovered ? Theme.surface : "transparent"
-                border.width: row.primary ? 1 : 0
-                border.color: Qt.rgba(Theme.fg.r, Theme.fg.g, Theme.fg.b, 0.45)
+                color: row.primary ? Theme.itemCursor
+                     : row.isOpen ? Theme.itemSelected
+                     : hov.hovered ? Theme.itemHover : "transparent"
             }
             HoverHandler { id: hov }
 

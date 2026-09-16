@@ -473,6 +473,15 @@ FloatingWindow {
             const ctrl = e.modifiers & Qt.ControlModifier
             const inConv = Backend.openConvId !== ""
 
+            if (inConv && Backend.authRequiredAccount !== "") {
+                if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter)
+                    Backend.startReauth()
+                else if (e.key === Qt.Key_Escape)
+                    Backend.dismissReauth()
+                e.accepted = true
+                return
+            }
+
             // Modals (changelog, cheat sheet) own their own focus + keys via the
             // QsLib Modal scaffold; while one is open it has focus and this router
             // never sees the event.
