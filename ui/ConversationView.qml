@@ -241,6 +241,15 @@ Rectangle {
     function _reserved(label) {
         return '\u200B<span style="color:transparent;">&#8201;' + label + '&#8201;&nbsp;</span>'
     }
+    function _decodeEntities(value) {
+        const named = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " }
+        return String(value || "").replace(/&(#(?:x[0-9a-f]+|\d+)|amp|lt|gt|quot|apos|nbsp);/gi,
+            function(_, entity) {
+                if (entity[0] !== "#") return named[entity.toLowerCase()]
+                const hex = entity[1].toLowerCase() === "x"
+                return String.fromCodePoint(parseInt(entity.slice(hex ? 2 : 1), hex ? 16 : 10))
+            })
+    }
     function _renderHints() {
         let raw = 0, kept = 0
         _hintRe.lastIndex = 0
@@ -288,11 +297,11 @@ Rectangle {
                     .replace(/&nbsp;/g, " ").replace(/&#\d+;/g, "").trim()
                 if (txt.length < 2) { rawSkip.push(true); continue }
                 rawSkip.push(false)
-                urls.push(match[1]); kinds.push("link"); inners.push(""); imgTargets.push(-1)
+                urls.push(_decodeEntities(match[1])); kinds.push("link"); inners.push(""); imgTargets.push(-1)
                 continue
             }
             rawSkip.push(false)
-            urls.push(match[1]); kinds.push("imglink"); imgTargets.push(imgOrd)
+            urls.push(_decodeEntities(match[1])); kinds.push("imglink"); imgTargets.push(imgOrd)
             const segs = inner
                 .replace(/<[^>]+>/g, "\n").split("\n").map(t => t.trim()).filter(t => t.length)
             inners.push(segs.length ? segs[segs.length - 1] : "")
@@ -782,10 +791,7 @@ Rectangle {
             /\b\d[\d,.]*\s?(?:USD|EUR|SEK|kr)\b/g,
             /\b\d{4,}\b/g,
         ]
-        const dec = t => t.replace(/<[^>]+>/g, "")
-            .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
-            .replace(/&quot;/g, '"').replace(/&nbsp;/g, " ")
-            .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(n)).trim()
+        const dec = t => _decodeEntities(t.replace(/<[^>]+>/g, "")).trim()
         let found = []
         // rendered links: label lands at the <a> tag, copies the href
         const aRe = /<a\s[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi
@@ -796,7 +802,7 @@ Rectangle {
             const at = doc.indexOf(label, docFrom)
             if (at < 0) continue
             docFrom = at + label.length
-            found.push({ s: at, e: at + label.length, copy: am[1],
+            found.push({ s: at, e: at + label.length, copy: _decodeEntities(am[1]),
                          htmlAt: am.index, htmlEnd: am.index + am[0].length })
         }
         for (const re of pats) {
