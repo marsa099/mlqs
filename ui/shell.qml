@@ -885,7 +885,7 @@ FloatingWindow {
                 else if (win.pane === "index") index.visualStart()
                 break
             case Qt.Key_U:
-                if (!inConv) Backend.undoRemove()
+                if (!inConv) Backend.undoLast()
                 break
             case Qt.Key_F:
                 if (inConv && (e.modifiers & Qt.ShiftModifier)) composer.forward(conv.focusedMsg())

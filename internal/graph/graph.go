@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -31,6 +32,15 @@ import (
 )
 
 const apiBase = "https://graph.microsoft.com/v1.0"
+
+type apiError struct {
+	status     int
+	msg        string
+	retryAfter time.Duration
+}
+
+func (e *apiError) Error() string             { return fmt.Sprintf("graph: %d %s", e.status, e.msg) }
+func (e *apiError) RetryAfter() time.Duration { return e.retryAfter }
 
 type Client struct {
 	hc *http.Client
@@ -96,7 +106,8 @@ func (c *Client) doAbs(ctx context.Context, method, u string, body, out any) err
 		if json.Unmarshal(rb, &e) == nil && e.Error.Message != "" {
 			msg = e.Error.Message
 		}
-		return fmt.Errorf("graph: %d %s", resp.StatusCode, msg)
+		retryAfter, _ := strconv.Atoi(resp.Header.Get("Retry-After"))
+		return &apiError{status: resp.StatusCode, msg: msg, retryAfter: time.Duration(retryAfter) * time.Second}
 	}
 	if out != nil && len(rb) > 0 {
 		return json.Unmarshal(rb, out)

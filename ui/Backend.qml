@@ -77,9 +77,6 @@ Singleton {
     property string nextCursor: ""
     property string pendingCursor: ""
     property bool loadingConvs: false
-    // folder id whose authoritative (live) page has landed — gates the cached
-    // warm-paint so it can't clobber fresh data mid-load
-    property string _freshFolder: ""
     property var messages: []
     property string openConvId: ""
     property string openConvSubject: ""
@@ -312,6 +309,7 @@ Singleton {
     // Mark every summarized unread conversation read, reusing the markread path.
     function markAllRead(ids) {
         if (!ids || !ids.length) return
+        lastRead = null
         for (const id of ids) {
             const i = findRow(id)
             const acct = i >= 0 ? (convsModel.get(i).account || currentAccount) : currentAccount
@@ -330,11 +328,13 @@ Singleton {
             if (r.unread) rows.push({ tid: r.tid, account: r.account })
         }
         if (rows.length === 0) { toast("nothing unread here"); return }
+        lastRead = { folderId: currentFolderId, items: rows }
+        lastRemoved = null
         for (const r of rows) {
             send({ type: "markread", account: r.account || currentAccount, id: r.tid, text: "true" })
             setLocalRead(r.tid, true, r.account)
         }
-        toast("marked " + rows.length + " read")
+        toast("Marked all as read · u to undo")
     }
 
     // Safety net: if the daemon never replies (hung provider), drop the spinner.
@@ -407,10 +407,8 @@ Singleton {
         nextCursor = ""; pendingCursor = ""
         _convsByAccount = {}; cursorByAccount = {}; _pagingAccounts = {}; acctError = {}
         loadingConvs = true
-        for (const w of workspaces) {
+        for (const w of workspaces)
             if (_inboxIdFor(w.id) !== "") _fetchUnifiedFor(w.id)
-            else send({ type: "folders", account: w.id })
-        }
     }
 
     function _fetchUnifiedFor(acct) {
@@ -423,6 +421,11 @@ Singleton {
     // unread block first (the ordering invariant convUpdated's reinsertion relies
     // on), date-desc within each block; Threads and search results are chronologies,
     // so they sort on date alone — safe because convUpdated bails out in both.
+    function _mergedResultsComplete() {
+        const accts = accountFilter === "" ? workspaces.map(w => w.id) : [accountFilter]
+        return accts.every(a => _convsByAccount[a] !== undefined)
+    }
+
     function _rebuildMerged() {
         const all = []
         for (const acct in _convsByAccount)
@@ -620,6 +623,7 @@ Singleton {
     // Shift+R in the index: flip a thread's read state (server + local)
     function toggleRead(row) {
         if (!row || !row.tid) return
+        lastRead = null
         const acct = row.account || currentAccount
         const read = !!row.unread   // unread → mark read; read → mark unread
         send({ type: "markread", account: acct, id: row.tid, text: read ? "true" : "false" })
@@ -644,6 +648,7 @@ Singleton {
     // one-level undo for destructive moves (u) — Gmail restores server-side.
     // Holds a LIST so visual-mode batches undo as one unit.
     property var lastRemoved: null
+    property var lastRead: null
 
     function _snapRow(i) {
         const r = convsModel.get(i)
@@ -664,6 +669,7 @@ Singleton {
         }
         if (items.length === 0) return 0
         lastRemoved = { kind: kind, folderId: currentFolderId, items: items }
+        lastRead = null
         for (const it of items) {
             const acct = it.row.account || currentAccount
             send({ type: kind, account: acct, id: it.row.tid })
@@ -689,6 +695,7 @@ Singleton {
     // rows: model rows; if any unread → all read, else all unread
     function batchRead(rows) {
         if (!rows.length) return
+        lastRead = null
         const read = rows.some(r => r.unread)
         for (const r of rows) {
             if (!!r.unread !== read) continue
@@ -709,6 +716,18 @@ Singleton {
             if (i >= 0) convsModel.setProperty(i, "starred", star)
         }
         toast(star ? "starred" : "unstarred")
+    }
+
+    function undoLast() {
+        if (!lastRead) { undoRemove(); return }
+        const lr = lastRead
+        lastRead = null
+        for (const r of lr.items) {
+            const acct = r.account || currentAccount
+            send({ type: "markread", account: acct, id: r.tid, text: "false" })
+            if (lr.folderId === currentFolderId) setLocalRead(r.tid, false, acct)
+        }
+        toast("Restored unread mail")
     }
 
     function undoRemove() {
@@ -1068,12 +1087,11 @@ Singleton {
             }
             // keep EVERY account's list — the merged fetch needs each inbox id,
             // and they differ per provider
+            const firstFolders = foldersByAccount[e.account] === undefined
             const fm = Object.assign({}, foldersByAccount)
             fm[e.account] = e.folders || []
             foldersByAccount = fm
-            // unified and this account hasn't been fetched yet → now we can
-            if (unified && inboxF && _convsByAccount[e.account] === undefined
-                    && !_pagingAccounts[e.account])
+            if (unified && firstFolders && inboxF)
                 _fetchUnifiedFor(e.account)
             if (e.account !== currentAccount) return
             // deterministic order: the daemon may deliver cached + fresh lists
@@ -1105,8 +1123,10 @@ Singleton {
                 const sm = Object.assign({}, _convsByAccount)
                 sm[sacct] = e.items || []
                 _convsByAccount = sm
-                loadingConvs = false
-                _rebuildMerged()
+                if (_mergedResultsComplete()) {
+                    loadingConvs = false
+                    _rebuildMerged()
+                }
                 return
             }
             if (threadsView && (e.folder || "") === "__threads") {
@@ -1117,8 +1137,10 @@ Singleton {
                 const tm = Object.assign({}, _convsByAccount)
                 tm[tacct] = e.items || []
                 _convsByAccount = tm
-                loadingConvs = false
-                _rebuildMerged()
+                if (_mergedResultsComplete()) {
+                    loadingConvs = false
+                    _rebuildMerged()
+                }
                 return
             }
             if (unified) {
@@ -1127,17 +1149,7 @@ Singleton {
                 const acct = e.account || ""
                 if (acct === "" || (e.folder || "") !== _inboxIdFor(acct)) return
                 const paging = !!_pagingAccounts[acct]
-                // the cached warm-paint only fills an account we have nothing for
-                if (e.cached) {
-                    if (_convsByAccount[acct] === undefined) {
-                        const cm = Object.assign({}, _convsByAccount)
-                        cm[acct] = e.items || []
-                        _convsByAccount = cm
-                        _rebuildMerged()
-                    }
-                    return
-                }
-                loadingConvs = false
+                if (e.cached) return
                 const em = Object.assign({}, acctError); delete em[acct]; acctError = em
                 const cm2 = Object.assign({}, _convsByAccount)
                 // a page appends to that account's rows; a fresh load replaces them
@@ -1145,26 +1157,17 @@ Singleton {
                 _convsByAccount = cm2
                 const km = Object.assign({}, cursorByAccount); km[acct] = e.next || ""; cursorByAccount = km
                 if (paging) { const pm = Object.assign({}, _pagingAccounts); delete pm[acct]; _pagingAccounts = pm }
-                _rebuildMerged()
+                if (_mergedResultsComplete()) {
+                    loadingConvs = false
+                    _rebuildMerged()
+                }
                 return
             }
             if (e.account !== currentAccount) return
             if ((e.folder || "") !== currentFolderId) return
             const items = e.items || []
-            if (e.cached) {
-                // warm-start paint: fill instantly, but never overwrite a live
-                // result that already landed for this folder (races the fetch)
-                if (pendingCursor === "" && (convsModel.count === 0
-                        || _freshFolder !== currentAccount + "/" + currentFolderId)) {
-                    convsModel.clear()
-                    for (const c of items) if (findRow(c.id) < 0) convsModel.append(toRow(c))
-                    loadingConvs = false
-                }
-                return
-            }
-            // live result — authoritative; replaces the cached paint
+            if (e.cached) return
             loadingConvs = false
-            _freshFolder = currentAccount + "/" + currentFolderId
             if (pendingCursor !== "") pendingCursor = ""
             else convsModel.clear()
             // later pages can overlap the stitched unread block — dedup
@@ -1258,9 +1261,10 @@ Singleton {
             if (!filteredView) return
             const acct = e.account || ""
             const m = Object.assign({}, _convsByAccount); m[acct] = e.items || []; _convsByAccount = m
-            loadingConvs = false
-            // reuse the merged-inbox rebuild: same shape, one list across accounts
-            _rebuildMerged()
+            if (_mergedResultsComplete()) {
+                loadingConvs = false
+                _rebuildMerged()
+            }
         } else if (e.type === "contacts") {
             contactsResult(e.items || [], e.query || "")
         } else if (e.type === "readmarked") {
@@ -1310,8 +1314,10 @@ Singleton {
             if (merged && e.account && _convsByAccount[e.account] === undefined) {
                 const em2 = Object.assign({}, acctError); em2[e.account] = true; acctError = em2
                 const cm3 = Object.assign({}, _convsByAccount); cm3[e.account] = []; _convsByAccount = cm3
-                loadingConvs = false
-                _rebuildMerged()
+                if (_mergedResultsComplete()) {
+                    loadingConvs = false
+                    _rebuildMerged()
+                }
             }
             if ((e.text || "").indexOf("mlqs send") === 0)
                 messages = messages.map(m => m.sending ? Object.assign({}, m, { sending: false, failed: true }) : m)

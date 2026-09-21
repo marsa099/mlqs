@@ -44,11 +44,13 @@ func New(ctx context.Context, ts oauth2.TokenSource) *Client {
 }
 
 type apiError struct {
-	status int
-	msg    string
+	status     int
+	msg        string
+	retryAfter time.Duration
 }
 
-func (e *apiError) Error() string { return fmt.Sprintf("gmail: %d %s", e.status, e.msg) }
+func (e *apiError) Error() string             { return fmt.Sprintf("gmail: %d %s", e.status, e.msg) }
+func (e *apiError) RetryAfter() time.Duration { return e.retryAfter }
 
 func (c *Client) do(ctx context.Context, method, path string, q url.Values, body, out any) error {
 	u := apiBase + path
@@ -87,7 +89,8 @@ func (c *Client) do(ctx context.Context, method, path string, q url.Values, body
 		}
 		json.Unmarshal(rb, &e)
 		debuglog.API("gmail %s %s -> %d %s", method, path, resp.StatusCode, e.Error.Message)
-		return &apiError{status: resp.StatusCode, msg: e.Error.Message}
+		retryAfter, _ := strconv.Atoi(resp.Header.Get("Retry-After"))
+		return &apiError{status: resp.StatusCode, msg: e.Error.Message, retryAfter: time.Duration(retryAfter) * time.Second}
 	}
 	if out != nil && len(rb) > 0 {
 		return json.Unmarshal(rb, out)

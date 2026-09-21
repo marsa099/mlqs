@@ -179,11 +179,29 @@ func sockPath() string {
 	return "/tmp/mlqs.sock"
 }
 
+type readJob struct {
+	conn net.Conn
+	cmd  command
+}
+
+type readLane struct {
+	jobs chan readJob
+	next time.Time
+}
+
 type daemon struct {
 	cfg       *config.Config
 	db        *cache.DB
 	providers map[string]provider.Provider         // keyed by account name
 	cals      map[string]provider.CalendarProvider // keyed by account name
+
+	readMu             sync.Mutex
+	readLanes          map[string]*readLane
+	readPace           time.Duration
+	readRetryBase      time.Duration
+	folderRefreshMu    sync.Mutex
+	folderRefresh      map[string]*time.Timer
+	folderRefreshDelay time.Duration
 
 	calMu       sync.Mutex
 	calNotified map[string]bool // event occurrence keys already reminded
@@ -206,6 +224,126 @@ type daemon struct {
 	updEtag     string
 	updTarget   string // SHA to update toward from the last 200 ("" = up to date); replayed on a 304
 	updLast     time.Time
+}
+
+func (d *daemon) readLane(account string) *readLane {
+	d.readMu.Lock()
+	defer d.readMu.Unlock()
+	if d.readLanes == nil {
+		d.readLanes = map[string]*readLane{}
+	}
+	if d.readLanes[account] == nil {
+		lane := &readLane{jobs: make(chan readJob, 1024)}
+		d.readLanes[account] = lane
+		go d.runReadLane(account, lane)
+	}
+	return d.readLanes[account]
+}
+
+func rateLimited(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := strings.ToLower(err.Error())
+	return strings.Contains(s, " 429 ") || strings.Contains(s, ": 429") ||
+		strings.Contains(s, "too many requests") || strings.Contains(s, "ratelimit")
+}
+
+func retryDelay(err error, fallback time.Duration) time.Duration {
+	var retry interface{ RetryAfter() time.Duration }
+	if errors.As(err, &retry) && retry.RetryAfter() > 0 {
+		return retry.RetryAfter()
+	}
+	return fallback
+}
+
+func (d *daemon) enqueueRead(conn net.Conn, cmd command) {
+	d.readLane(cmd.Account).jobs <- readJob{conn: conn, cmd: cmd}
+}
+
+func (d *daemon) runReadLane(account string, lane *readLane) {
+	for job := range lane.jobs {
+		err := d.markRead(account, lane, job.cmd.ID, job.cmd.Text != "false")
+		if err != nil {
+			d.commandFailed(job.conn, job.cmd, err)
+			continue
+		}
+		d.db.SetConvFlags(account, job.cmd.ID, "unread", job.cmd.Text == "false")
+		d.scheduleFolderRefresh(account)
+	}
+}
+
+func (d *daemon) markRead(account string, lane *readLane, id string, read bool) error {
+	pace := d.readPace
+	if pace <= 0 {
+		pace = 150 * time.Millisecond
+	}
+	if wait := time.Until(lane.next); wait > 0 {
+		time.Sleep(wait)
+	}
+
+	base := d.readRetryBase
+	if base <= 0 {
+		base = time.Second
+	}
+	for attempt := 0; ; attempt++ {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		err := d.providers[account].MarkRead(ctx, id, read)
+		cancel()
+		lane.next = time.Now().Add(pace)
+		if err == nil || !rateLimited(err) || attempt == 3 {
+			return err
+		}
+		time.Sleep(retryDelay(err, base<<attempt))
+	}
+}
+
+func (d *daemon) commandFailed(conn net.Conn, cmd command, err error) {
+	debuglog.API("%s %s: %v", cmd.Type, cmd.Account, err)
+	var re *oauth2.RetrieveError
+	if errors.As(err, &re) && re.ErrorCode == "invalid_grant" {
+		d.sendTo(conn, map[string]any{
+			"type": "authRequired", "account": cmd.Account,
+			"operation": cmd.Type, "id": cmd.ID,
+		})
+		return
+	}
+	d.sendTo(conn, map[string]any{"type": "toast", "text": fmt.Sprintf("mlqs %s: %v", cmd.Type, err)})
+}
+
+func (d *daemon) scheduleFolderRefresh(account string) {
+	delay := d.folderRefreshDelay
+	if delay <= 0 {
+		delay = 2500 * time.Millisecond
+	}
+	p := d.providers[account]
+
+	d.folderRefreshMu.Lock()
+	if d.folderRefresh == nil {
+		d.folderRefresh = map[string]*time.Timer{}
+	}
+	if old := d.folderRefresh[account]; old != nil {
+		old.Stop()
+	}
+	var timer *time.Timer
+	timer = time.AfterFunc(delay, func() {
+		d.folderRefreshMu.Lock()
+		if d.folderRefresh[account] != timer {
+			d.folderRefreshMu.Unlock()
+			return
+		}
+		delete(d.folderRefresh, account)
+		d.folderRefreshMu.Unlock()
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if fs, err := p.ListFolders(ctx); err == nil {
+			d.db.UpsertFolders(account, fs)
+			d.broadcast(map[string]any{"type": "folders", "account": account, "folders": fs})
+		}
+	})
+	d.folderRefresh[account] = timer
+	d.folderRefreshMu.Unlock()
 }
 
 // gitRev is injected at build time (ldflags -X main.gitRev=<sha>); empty on
@@ -680,7 +818,9 @@ func (d *daemon) serve(conn net.Conn) {
 			} else {
 				d.broadcast(map[string]any{"type": "toast", "text": "Summaries enabled — press the key again to summarize"})
 			}
-		case "folders", "conversations", "conversation", "openhtml", "openatt", "search", "threads", "contacts", "markread", "star", "archive", "unarchive", "trash", "untrash", "send",
+		case "markread":
+			d.enqueueRead(conn, cmd)
+		case "folders", "conversations", "conversation", "openhtml", "openatt", "search", "threads", "contacts", "star", "archive", "unarchive", "trash", "untrash", "send",
 			"agenda", "rsvp", "rsvpmail", "createevent", "calendars", "summarize":
 			go d.handle(conn, cmd)
 		default:
@@ -852,18 +992,7 @@ func (d *daemon) handle(conn net.Conn, cmd command) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	fail := func(err error) {
-		debuglog.API("%s %s: %v", cmd.Type, cmd.Account, err)
-		var re *oauth2.RetrieveError
-		if errors.As(err, &re) && re.ErrorCode == "invalid_grant" {
-			d.sendTo(conn, map[string]any{
-				"type": "authRequired", "account": cmd.Account,
-				"operation": cmd.Type, "id": cmd.ID,
-			})
-			return
-		}
-		d.sendTo(conn, map[string]any{"type": "toast", "text": fmt.Sprintf("mlqs %s: %v", cmd.Type, err)})
-	}
+	fail := func(err error) { d.commandFailed(conn, cmd, err) }
 	switch cmd.Type {
 	case "folders":
 		// warm-start: cached sidebar first (also auto-selects inbox → cached
@@ -951,77 +1080,70 @@ func (d *daemon) handle(conn net.Conn, cmd command) {
 				"folder": cmd.Folder, "items": kept, "next": cur})
 			return
 		}
-		// warm-start: paint the cached folder instantly, then fetch live below
-		if cached := d.applyRules(d.db.CachedConversations(cmd.Account, cmd.Folder, 200), false); len(cached) > 0 {
+		// Paint cached unreads plus the newest page before refreshing the complete
+		// unread set; this handler already runs off the socket reader.
+		cached := d.applyRules(d.db.CachedConversations(cmd.Account, cmd.Folder, 200), false)
+		if len(cached) > 0 {
 			d.sendTo(conn, map[string]any{"type": "conversations", "account": cmd.Account,
 				"folder": cmd.Folder, "items": cached, "cached": true})
 		}
-		// First page: unreads pin to the top — fetch the folder's full unread
-		// set (capped) and the newest page of everything, stitched. Deep-buried
-		// unreads surface instead of hiding hundreds of rows down.
-		var wg sync.WaitGroup
-		var unread []provider.Conversation
-		var normal provider.Page
-		var uerr, nerr error
-		wg.Add(2)
-		go func() {
-			defer wg.Done()
-			cur := ""
-			for len(unread) < 200 {
-				pg, err := p.ListConversations(ctx, cmd.Folder, cur, 100, true)
-				if err != nil {
-					uerr = err
-					return
-				}
-				unread = append(unread, pg.Conversations...)
-				if pg.NextCursor == "" {
-					break
-				}
-				cur = pg.NextCursor
-			}
-		}()
-		go func() {
-			defer wg.Done()
-			normal, nerr = p.ListConversations(ctx, cmd.Folder, "", 50, false)
-		}()
-		wg.Wait()
+
+		normal, nerr := p.ListConversations(ctx, cmd.Folder, "", 50, false)
 		if nerr != nil {
 			fail(nerr)
 			return
 		}
-		if uerr != nil {
-			debuglog.API("unread stitch %s: %v", cmd.Folder, uerr)
+		d.db.UpsertConversations(cmd.Account, normal.Conversations)
+		d.markHiddenRead(cmd.Account, d.applyRules(normal.Conversations, true))
+
+		visibleNormal := d.applyRules(normal.Conversations, false)
+		fresh := make(map[string]provider.Conversation, len(visibleNormal))
+		for _, c := range visibleNormal {
+			fresh[c.ID] = c
 		}
 		seen := map[string]bool{}
-		for _, c := range unread {
-			seen[c.ID] = true
-		}
-		items := unread
-		for _, c := range normal.Conversations {
-			if !seen[c.ID] {
+		items := make([]provider.Conversation, 0, len(cached)+len(visibleNormal))
+		for _, c := range cached {
+			if current, ok := fresh[c.ID]; ok {
+				c = current
+			}
+			if c.Unread {
+				seen[c.ID] = true
 				items = append(items, c)
 			}
 		}
-		d.db.UpsertConversations(cmd.Account, items)
-		// The unread fetch is the folder's FULL unread set (when uncapped):
-		// any cached row still flagged unread that it didn't return was read
-		// elsewhere (another client, the web UI). Without this, those rows
-		// flash stale-unread in the warm paint on every open, forever —
-		// upserts only touch rows the live page contains.
-		if uerr == nil && len(unread) < 200 {
+		for _, c := range visibleNormal {
+			if !seen[c.ID] {
+				seen[c.ID] = true
+				items = append(items, c)
+			}
+		}
+		d.sendTo(conn, map[string]any{"type": "conversations", "account": cmd.Account,
+			"folder": cmd.Folder, "items": items, "next": normal.NextCursor})
+
+		var unread []provider.Conversation
+		cur := ""
+		for len(unread) < 200 {
+			pg, err := p.ListConversations(ctx, cmd.Folder, cur, 100, true)
+			if err != nil {
+				debuglog.API("unread refresh %s: %v", cmd.Folder, err)
+				return
+			}
+			unread = append(unread, pg.Conversations...)
+			if pg.NextCursor == "" {
+				break
+			}
+			cur = pg.NextCursor
+		}
+		d.db.UpsertConversations(cmd.Account, unread)
+		if len(unread) < 200 {
 			ids := make([]string, 0, len(unread))
 			for _, c := range unread {
 				ids = append(ids, c.ID)
 			}
 			d.db.ReconcileFolderRead(cmd.Account, cmd.Folder, ids)
 		}
-		// Filter LAST. ReconcileFolderRead clears unread on cached rows absent from
-		// the unread list, so filtering before it would force hidden-but-unread rows
-		// to read in the cache and corrupt every later warm paint.
-		d.markHiddenRead(cmd.Account, d.applyRules(items, true))
-		items = d.applyRules(items, false)
-		d.sendTo(conn, map[string]any{"type": "conversations", "account": cmd.Account,
-			"folder": cmd.Folder, "items": items, "next": normal.NextCursor})
+		d.markHiddenRead(cmd.Account, d.applyRules(unread, true))
 	case "conversation":
 		msgs, err := p.GetConversation(ctx, cmd.ID)
 		if err != nil {
@@ -1197,22 +1319,6 @@ func (d *daemon) handle(conn net.Conn, cmd command) {
 		}
 		d.sendTo(conn, map[string]any{"type": "conversations", "account": cmd.Account,
 			"folder": "", "items": pg.Conversations, "next": pg.NextCursor})
-	case "markread":
-		if err := p.MarkRead(ctx, cmd.ID, cmd.Text != "false"); err != nil {
-			fail(err)
-		} else {
-			d.db.SetConvFlags(cmd.Account, cmd.ID, "unread", cmd.Text == "false")
-			// rebroadcast counts once Gmail has digested the change — a sync
-			// tick in the gap otherwise overwrites the UI's local decrement
-			go func(account string) {
-				time.Sleep(2500 * time.Millisecond)
-				rctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-				defer cancel()
-				if fs, err := p.ListFolders(rctx); err == nil {
-					d.broadcast(map[string]any{"type": "folders", "account": account, "folders": fs})
-				}
-			}(cmd.Account)
-		}
 	case "star":
 		if err := p.Star(ctx, cmd.ID, cmd.Text != "false"); err != nil {
 			fail(err)

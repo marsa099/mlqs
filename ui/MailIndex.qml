@@ -64,14 +64,23 @@ Rectangle {
         id: header
         anchors { top: parent.top; left: parent.left; right: parent.right }
         height: 52; color: "transparent"
-        Text {
+        Row {
             anchors.left: parent.left; anchors.leftMargin: 14
             anchors.verticalCenter: parent.verticalCenter
-            text: (Backend.currentFolderName.charAt(0) + Backend.currentFolderName.slice(1).toLowerCase())
-                  + (Backend.loadingConvs ? "  · loading…" : "")
-            color: Theme.fg; font.family: Theme.fontFamily
-            font.hintingPreference: Font.PreferNoHinting
-            font.pixelSize: 14; font.weight: 600
+            spacing: 8
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: Backend.currentFolderName.charAt(0) + Backend.currentFolderName.slice(1).toLowerCase()
+                color: Theme.fg; font.family: Theme.fontFamily
+                font.hintingPreference: Font.PreferNoHinting
+                font.pixelSize: 14; font.weight: 600
+            }
+            Spinner {
+                anchors.verticalCenter: parent.verticalCenter
+                visible: Backend.loadingConvs
+                running: Backend.loadingConvs
+                color: Theme.fg
+            }
         }
         Rectangle {
             anchors.horizontalCenter: parent.horizontalCenter
