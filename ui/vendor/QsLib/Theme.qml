@@ -111,6 +111,8 @@ Singleton {
     readonly property color ink:          palettes[mode].ink
     readonly property color warning:      palettes[mode].warning
     readonly property color brightWhite:  palettes[mode].brightWhite
+    readonly property color contrastSurface: mode === "light" ? ink : fg
+    readonly property color onContrast: mode === "light" ? bg : ink
 
     readonly property real hairlineAlpha: palettes[mode].hairlineAlpha
     readonly property real dimmedFgAlpha: palettes[mode].dimmedFgAlpha

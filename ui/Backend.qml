@@ -1366,6 +1366,7 @@ Singleton {
             parser: SplitParser { onRead: data => { backend.lastRecv = Date.now(); backend.onEvent(data) } }
             onConnectionStateChanged: {
                 if (!connected) return
+                backend.lastRecv = Date.now()
                 // daemon re-sends workspaces on connect; refresh the open view too
                 if (backend.unified) backend.selectUnified()
                 else if (backend.threadsView) backend.selectThreads()
@@ -1389,6 +1390,11 @@ Singleton {
     }
     Component.onCompleted: _redial()
 
+    Process {
+        id: daemonRecovery
+        command: ["mlqs-daemon-ensure"]
+    }
+
     // Re-dial whenever the daemon has been silent too long. It pings every
     // 3s, so 8s of silence = dead socket or never connected; a large tick gap
     // means we were suspended/hibernated — re-dial for a fresh bootstrap.
@@ -1403,6 +1409,7 @@ Singleton {
             lastTick = now
             if (cooldown > 0 && !frozen) { cooldown--; return }
             if (frozen || (now - backend.lastRecv) > 8000) {
+                if (!daemonRecovery.running) daemonRecovery.running = true
                 backend._redial()
                 cooldown = 3
             }

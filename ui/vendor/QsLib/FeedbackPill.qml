@@ -15,10 +15,11 @@ Rectangle {
     width: row.implicitWidth + 28
     height: 32
     radius: 8
-    color: Theme.mode === "light" ? Theme.ink : Theme.fg
-    border.width: 1
-    border.color: Theme.hairline
+    color: "transparent"
+    border.width: 0
     Behavior on opacity { NumberAnimation { duration: Motion.base } }
+
+    ContrastSurface { anchors.fill: parent; radius: pill.radius }
 
     Row {
         id: row
@@ -38,7 +39,7 @@ Rectangle {
         Text {
             id: label
             anchors.verticalCenter: parent.verticalCenter
-            color: Theme.bg
+            color: Theme.onContrast
             font.family: Theme.fontFamily
             font.hintingPreference: Font.PreferNoHinting
             font.pixelSize: 13

@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+sock="${XDG_RUNTIME_DIR:?XDG_RUNTIME_DIR is not set}/mlqs.sock"
+pid_file="$XDG_RUNTIME_DIR/mlqs.pid"
+daemon_bin="${MLQS_DAEMON_BIN:-mlqs}"
+log_file="${MLQS_DAEMON_LOG:-/tmp/mlqs-daemon.log}"
+
+exec 8>"$XDG_RUNTIME_DIR/mlqs-daemon.lock"
+flock 8
+
+probe() {
+  python3 - "$sock" <<'PY'
+import json, socket, sys
+s = socket.socket(socket.AF_UNIX)
+s.settimeout(1)
+try:
+    s.connect(sys.argv[1])
+except (FileNotFoundError, ConnectionRefusedError):
+    raise SystemExit(2)
+s.sendall(b'{"type":"ping"}\n')
+buf = b''
+while b'\n' not in buf or b'"pong"' not in buf:
+    data = s.recv(65536)
+    if not data:
+        raise SystemExit(1)
+    buf += data
+for line in buf.splitlines():
+    try:
+        if json.loads(line).get("type") == "pong":
+            raise SystemExit(0)
+    except (ValueError, AttributeError):
+        pass
+raise SystemExit(1)
+PY
+}
+
+for _ in $(seq 1 10); do
+  if probe 2>/dev/null; then
+    exit 0
+  else
+    status=$?
+  fi
+  [[ "$status" == 2 ]] && break
+  sleep 0.5
+done
+
+current=$(readlink -f "$(command -v "$daemon_bin")")
+pid=$(cat "$pid_file" 2>/dev/null || true)
+if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then
+  exe=$(readlink -f "/proc/$pid/exe" 2>/dev/null || true)
+  if [[ -n "$exe" && "$exe" != "$current" ]]; then
+    echo "mlqs-daemon-ensure: another mlqs build is running" >&2
+    exit 1
+  fi
+  if [[ "$exe" == "$current" ]]; then
+    kill "$pid" 2>/dev/null || true
+    for _ in $(seq 1 50); do kill -0 "$pid" 2>/dev/null || break; sleep 0.1; done
+    kill -9 "$pid" 2>/dev/null || true
+  fi
+fi
+
+rm -f "$sock" "$pid_file"
+setsid nohup "$daemon_bin" >"$log_file" 2>&1 </dev/null 8>&- &
+echo $! >"$pid_file"
+for _ in $(seq 1 150); do
+  if probe 2>/dev/null; then
+    exit 0
+  fi
+  sleep 0.1
+done
+
+echo "mlqs-daemon-ensure: daemon did not answer ping" >&2
+exit 1
