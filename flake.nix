@@ -17,7 +17,7 @@
         version = "0.1.0";
         src = ./.;
         vendorHash = "sha256-GqJ4Ee7UOiBedaEXfbvOba+EPmozDGil9WwihY+wkt0=";
-        subPackages = [ "." "./cmd/mlqs-cli" ];
+        subPackages = [ "." ];
         # Embed the build's git rev so the daemon can detect newer builds, plus
         # the repos it polls. This is a FORK build: the NixOS flake pins
         # marsa099/mlqs, so updateRepo must name the fork and upstreamRepo
