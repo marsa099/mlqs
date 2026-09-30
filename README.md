@@ -165,6 +165,26 @@ Notes:
 - Replies thread through Graph's native reply flow, so recipients in
   Outlook see the usual quoted history.
 
+### Shared mailboxes
+
+A shared mailbox you have been delegated ("support@company.com") can
+be listed on the account. It shows up as its own row in that account's
+sidebar, under a **Shared** header, and behaves like a separate inbox:
+read, mark read, archive, trash and star work; it never counts toward
+badges, the unified inbox, Threads or notifications; replying from it
+is not supported (that would need `Mail.Send.Shared`).
+
+```json
+{ "name": "work", "vendor": "outlook", "email": "me@company.com",
+  "client_id": "<azure-application-client-id>",
+  "shared_mailboxes": ["support@company.com"] }
+```
+
+The extra `Mail.ReadWrite.Shared` scope is only requested when the list
+is non-empty, so re-run `mlqs auth work` after adding one (your Azure
+app registration must list that delegated permission, and your tenant
+may want admin consent for it).
+
 ## IMAP / SMTP (any standards mailbox)
 
 For a plain mailbox — Fastmail, Loopia, mailbox.org, a self-hosted

@@ -39,7 +39,7 @@ Rectangle {
     readonly property var roleIcon: ({
         inbox: "inbox-arrow-down", starred: "flag-7", sent: "paper-plane-2",
         drafts: "pen-3", spam: "triangle-warning", trash: "trash", label: "tag",
-        filtered: "filter"
+        filtered: "filter", shared: "users"
     })
     // Filtered is a destination you visit, like Spam or Trash — so it lives IN the
     // mailbox list rather than pinned above it with the mode rows. Synthetic (the
@@ -52,10 +52,11 @@ Rectangle {
     })
     readonly property var visibleFolders: {
         const src = Backend.folders || []
-        const mailbox = src.filter(f => f.section !== "labels")
+        const mailbox = src.filter(f => f.section === "mailbox")
+        const shared = src.filter(f => f.section === "shared")
         const labels = labelsCollapsed ? [] : src.filter(f => f.section === "labels")
         const mid = ((Backend.rules || []).length > 0) ? [filteredEntry] : []
-        return mailbox.concat(mid).concat(labels)
+        return mailbox.concat(mid).concat(shared).concat(labels)
     }
 
     // pinned virtual rows above the folders: All (-3), Threads (-2), Calendar (-1)

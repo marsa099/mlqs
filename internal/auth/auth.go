@@ -61,16 +61,27 @@ func oauthConfig(a config.Account, redirect string) (*oauth2.Config, error) {
 			// Empty tenant defaults to "common".
 			Endpoint:    endpoints.AzureAD(a.Tenant),
 			RedirectURL: redirect,
-			Scopes: []string{
-				"offline_access",
-				"https://graph.microsoft.com/Mail.ReadWrite",
-				"https://graph.microsoft.com/Mail.Send",
-				"https://graph.microsoft.com/Calendars.ReadWrite",
-				"https://graph.microsoft.com/User.Read",
-			},
+			Scopes:      graphScopes(a),
 		}, nil
 	}
 	return nil, fmt.Errorf("account %q: unknown vendor %q", a.Name, a.Vendor)
+}
+
+// graphScopes is the delegated permission set for an outlook account.
+// Mail.ReadWrite.Shared is only requested when shared mailboxes are
+// configured, so accounts without them never see an extra consent prompt.
+func graphScopes(a config.Account) []string {
+	scopes := []string{
+		"offline_access",
+		"https://graph.microsoft.com/Mail.ReadWrite",
+		"https://graph.microsoft.com/Mail.Send",
+		"https://graph.microsoft.com/Calendars.ReadWrite",
+		"https://graph.microsoft.com/User.Read",
+	}
+	if len(a.SharedMailboxes) > 0 {
+		scopes = append(scopes, "https://graph.microsoft.com/Mail.ReadWrite.Shared")
+	}
+	return scopes
 }
 
 // Authorize runs the interactive consent flow: local loopback listener,

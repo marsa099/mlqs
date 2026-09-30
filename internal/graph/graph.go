@@ -45,8 +45,57 @@ func (e *apiError) RetryAfter() time.Duration { return e.retryAfter }
 type Client struct {
 	hc *http.Client
 
+	// SharedMailboxes are delegated mailboxes surfaced as extra folders of
+	// this account (see config.Account.SharedMailboxes). Set before first use.
+	SharedMailboxes []string
+
 	mu        sync.Mutex
-	wellKnown map[string]string // wellKnownName -> folder id
+	wellKnown map[string]string // [addr+"|"+]wellKnownName -> folder id
+}
+
+// Shared-mailbox ids are namespaced so every provider-facing id (folder,
+// conversation, message) carries the mailbox it lives in: "shared:<addr>:<id>".
+// Graph ids are base64 and addresses have no colon, so the split is unambiguous.
+const sharedPrefix = "shared:"
+
+// mailbox splits a provider-facing id into the owning mailbox address ("" for
+// the signed-in user) and the raw Graph id.
+func mailbox(id string) (addr, raw string) {
+	if rest, ok := strings.CutPrefix(id, sharedPrefix); ok {
+		if a, r, ok := strings.Cut(rest, ":"); ok {
+			return a, r
+		}
+	}
+	return "", id
+}
+
+// userBase is the Graph path root for a mailbox: /me or /users/<addr>.
+func userBase(addr string) string {
+	if addr == "" {
+		return "/me"
+	}
+	return "/users/" + url.PathEscape(addr)
+}
+
+func wrapID(addr, id string) string {
+	if addr == "" || id == "" {
+		return id
+	}
+	return sharedPrefix + addr + ":" + id
+}
+
+// wrapConvs namespaces conversation + folder ids of rows read from a shared mailbox.
+func wrapConvs(addr string, cvs []provider.Conversation) []provider.Conversation {
+	if addr == "" {
+		return cvs
+	}
+	for i := range cvs {
+		cvs[i].ID = wrapID(addr, cvs[i].ID)
+		for j := range cvs[i].FolderIDs {
+			cvs[i].FolderIDs[j] = wrapID(addr, cvs[i].FolderIDs[j])
+		}
+	}
+	return cvs
 }
 
 func New(ctx context.Context, ts oauth2.TokenSource) *Client {
@@ -179,7 +228,46 @@ func (c *Client) ListFolders(ctx context.Context) ([]provider.Folder, error) {
 	// stable order: inbox, sent, drafts, archive, spam, trash, then labels
 	rank := map[string]int{"inbox": 0, "sent": 1, "drafts": 2, "archive": 3, "spam": 4, "trash": 5, "label": 6}
 	sort.SliceStable(out, func(i, j int) bool { return rank[out[i].Role] < rank[out[j].Role] })
+	// Shared mailboxes: one row each (their Inbox), role "shared". Unread is
+	// deliberately zeroed — delegated mail must never feed badges, the unified
+	// inbox or notifications; it is a place you go, not something that pulls.
+	for _, addr := range c.SharedMailboxes {
+		var f apiFolder
+		q := url.Values{"$select": {"id,totalItemCount"}}
+		if err := c.do(ctx, "GET", userBase(addr)+"/mailFolders/inbox", q, nil, &f); err != nil || f.ID == "" {
+			debuglog.API("graph shared mailbox %s: %v", addr, err)
+			continue
+		}
+		name := addr
+		if local, _, ok := strings.Cut(addr, "@"); ok && local != "" {
+			name = local
+		}
+		out = append(out, provider.Folder{ID: wrapID(addr, f.ID), Name: name, Role: "shared", Unread: 0, Total: f.Total})
+	}
 	return out, nil
+}
+
+// folderIDIn resolves a well-known folder inside a shared mailbox (cached).
+// The signed-in user's folders go through folderID.
+func (c *Client) folderIDIn(ctx context.Context, addr, wk string) string {
+	if addr == "" {
+		return c.folderID(ctx, wk)
+	}
+	key := addr + "|" + wk
+	c.mu.Lock()
+	id := c.wellKnown[key]
+	c.mu.Unlock()
+	if id != "" {
+		return id
+	}
+	var f apiFolder
+	if err := c.do(ctx, "GET", userBase(addr)+"/mailFolders/"+wk, url.Values{"$select": {"id"}}, nil, &f); err != nil || f.ID == "" {
+		return ""
+	}
+	c.mu.Lock()
+	c.wellKnown[key] = f.ID
+	c.mu.Unlock()
+	return f.ID
 }
 
 // folderID resolves a well-known name, listing folders once when unknown.
@@ -303,6 +391,7 @@ func group(msgs []apiMessage) []provider.Conversation {
 }
 
 func (c *Client) ListConversations(ctx context.Context, folderID, cursor string, limit int, unreadOnly bool) (provider.Page, error) {
+	addr, rawFolder := mailbox(folderID)
 	var res struct {
 		Items []apiMessage `json:"value"`
 		Next  string       `json:"@odata.nextLink"`
@@ -319,16 +408,19 @@ func (c *Client) ListConversations(ctx context.Context, folderID, cursor string,
 		} else {
 			q.Set("$orderby", "receivedDateTime desc")
 		}
-		if err := c.do(ctx, "GET", "/me/mailFolders/"+url.PathEscape(folderID)+"/messages", q, nil, &res); err != nil {
+		if err := c.do(ctx, "GET", userBase(addr)+"/mailFolders/"+url.PathEscape(rawFolder)+"/messages", q, nil, &res); err != nil {
 			return provider.Page{}, err
 		}
 	}
 	sort.SliceStable(res.Items, func(i, j int) bool { return res.Items[i].Received.After(res.Items[j].Received) })
-	return provider.Page{Conversations: group(res.Items), NextCursor: res.Next}, nil
+	return provider.Page{Conversations: wrapConvs(addr, group(res.Items)), NextCursor: res.Next}, nil
 }
 
 // convMessages lists every message of a conversation (full body optional).
+// Message ids in the result are raw Graph ids; callers that hand them to the
+// provider layer wrap them with the mailbox from convID.
 func (c *Client) convMessages(ctx context.Context, convID string, withBody bool) ([]apiMessage, error) {
+	addr, convID := mailbox(convID)
 	sel := listSelect
 	if withBody {
 		sel += ",body,replyTo,toRecipients,ccRecipients"
@@ -341,7 +433,7 @@ func (c *Client) convMessages(ctx context.Context, convID string, withBody bool)
 	var res struct {
 		Items []apiMessage `json:"value"`
 	}
-	if err := c.do(ctx, "GET", "/me/messages", q, nil, &res); err != nil {
+	if err := c.do(ctx, "GET", userBase(addr)+"/messages", q, nil, &res); err != nil {
 		return nil, err
 	}
 	sort.SliceStable(res.Items, func(i, j int) bool { return res.Items[i].Received.Before(res.Items[j].Received) })
@@ -359,6 +451,8 @@ type apiAttachment struct {
 }
 
 func (c *Client) GetConversation(ctx context.Context, id string) ([]provider.Message, error) {
+	addr, _ := mailbox(id)
+	base := userBase(addr)
 	msgs, err := c.convMessages(ctx, id, true)
 	if err != nil {
 		return nil, err
@@ -366,7 +460,7 @@ func (c *Client) GetConversation(ctx context.Context, id string) ([]provider.Mes
 	out := make([]provider.Message, 0, len(msgs))
 	for _, m := range msgs {
 		pm := provider.Message{
-			ID: m.ID, ConvID: m.ConversationID, Subject: m.Subject, Snippet: snippet(m.BodyPreview),
+			ID: wrapID(addr, m.ID), ConvID: wrapID(addr, m.ConversationID), Subject: m.Subject, Snippet: snippet(m.BodyPreview),
 			Date: m.Received, Unread: !m.IsRead, Starred: m.starred(),
 		}
 		if m.From != nil {
@@ -391,7 +485,7 @@ func (c *Client) GetConversation(ctx context.Context, id string) ([]provider.Mes
 		if strings.EqualFold(m.ODataType, "#microsoft.graph.eventMessageRequest") {
 			var detail apiMessage
 			q := url.Values{"$expand": {"microsoft.graph.eventMessage/event"}}
-			if err := c.do(ctx, "GET", "/me/messages/"+url.PathEscape(m.ID), q, nil, &detail); err != nil {
+			if err := c.do(ctx, "GET", base+"/messages/"+url.PathEscape(m.ID), q, nil, &detail); err != nil {
 				debuglog.API("graph event message %s: %v", m.ID, err)
 			} else if detail.Event != nil {
 				ev := detail.Event
@@ -424,7 +518,7 @@ func (c *Client) GetConversation(ctx context.Context, id string) ([]provider.Mes
 				Items []apiAttachment `json:"value"`
 			}
 			q := url.Values{"$select": {"id,name,contentType,size,isInline,contentId"}}
-			if err := c.do(ctx, "GET", "/me/messages/"+url.PathEscape(m.ID)+"/attachments", q, nil, &ares); err != nil {
+			if err := c.do(ctx, "GET", base+"/messages/"+url.PathEscape(m.ID)+"/attachments", q, nil, &ares); err != nil {
 				debuglog.API("graph attachments %s: %v", m.ID, err)
 			}
 			for _, a := range ares.Items {
@@ -447,11 +541,13 @@ func (c *Client) GetConversationMeta(ctx context.Context, id string) (provider.C
 	if len(msgs) == 0 {
 		return provider.Conversation{}, fmt.Errorf("conversation not found")
 	}
-	cvs := group(msgs)
+	addr, _ := mailbox(id)
+	cvs := wrapConvs(addr, group(msgs))
 	cv := cvs[0]
 	// the sync layer's inbox test is name-based ("Inbox"); Graph folder ids
-	// are opaque, so mark membership explicitly
-	if inbox := c.folderID(ctx, "inbox"); inbox != "" {
+	// are opaque, so mark membership explicitly. Shared mailboxes are left
+	// out on purpose: their mail must never look like inbox mail (no notifications).
+	if inbox := c.folderID(ctx, "inbox"); inbox != "" && addr == "" {
 		for _, f := range cv.FolderIDs {
 			if f == inbox {
 				cv.FolderIDs = append(cv.FolderIDs, "Inbox")
@@ -463,8 +559,9 @@ func (c *Client) GetConversationMeta(ctx context.Context, id string) (provider.C
 }
 
 func (c *Client) FetchAttachment(ctx context.Context, messageID, attachmentID string) ([]byte, error) {
+	addr, messageID := mailbox(messageID)
 	var a apiAttachment
-	if err := c.do(ctx, "GET", "/me/messages/"+url.PathEscape(messageID)+"/attachments/"+url.PathEscape(attachmentID), nil, nil, &a); err != nil {
+	if err := c.do(ctx, "GET", userBase(addr)+"/messages/"+url.PathEscape(messageID)+"/attachments/"+url.PathEscape(attachmentID), nil, nil, &a); err != nil {
 		return nil, err
 	}
 	return base64.StdEncoding.DecodeString(a.ContentBytes)
@@ -520,13 +617,16 @@ func (c *Client) Delta(ctx context.Context, sinceToken string) (provider.Delta, 
 
 // ── actions (fan out over the conversation's messages) ──
 
-func (c *Client) forEachMsg(ctx context.Context, convID string, f func(m apiMessage) error) error {
+// f receives the Graph path root of the conversation's mailbox (/me or /users/<addr>).
+func (c *Client) forEachMsg(ctx context.Context, convID string, f func(base string, m apiMessage) error) error {
+	addr, _ := mailbox(convID)
+	base := userBase(addr)
 	msgs, err := c.convMessages(ctx, convID, false)
 	if err != nil {
 		return err
 	}
 	for _, m := range msgs {
-		if err := f(m); err != nil {
+		if err := f(base, m); err != nil {
 			return err
 		}
 	}
@@ -534,11 +634,11 @@ func (c *Client) forEachMsg(ctx context.Context, convID string, f func(m apiMess
 }
 
 func (c *Client) MarkRead(ctx context.Context, convID string, read bool) error {
-	return c.forEachMsg(ctx, convID, func(m apiMessage) error {
+	return c.forEachMsg(ctx, convID, func(base string, m apiMessage) error {
 		if m.IsRead == read {
 			return nil
 		}
-		return c.do(ctx, "PATCH", "/me/messages/"+url.PathEscape(m.ID), nil,
+		return c.do(ctx, "PATCH", base+"/messages/"+url.PathEscape(m.ID), nil,
 			map[string]any{"isRead": read}, nil)
 	})
 }
@@ -548,19 +648,20 @@ func (c *Client) Star(ctx context.Context, convID string, starred bool) error {
 	if starred {
 		status = "flagged"
 	}
-	return c.forEachMsg(ctx, convID, func(m apiMessage) error {
-		return c.do(ctx, "PATCH", "/me/messages/"+url.PathEscape(m.ID), nil,
+	return c.forEachMsg(ctx, convID, func(base string, m apiMessage) error {
+		return c.do(ctx, "PATCH", base+"/messages/"+url.PathEscape(m.ID), nil,
 			map[string]any{"flag": map[string]string{"flagStatus": status}}, nil)
 	})
 }
 
 func (c *Client) moveConv(ctx context.Context, convID, destWellKnown string) error {
-	dest := c.folderID(ctx, destWellKnown)
+	addr, _ := mailbox(convID)
+	dest := c.folderIDIn(ctx, addr, destWellKnown)
 	if dest == "" {
 		dest = destWellKnown
 	}
-	return c.forEachMsg(ctx, convID, func(m apiMessage) error {
-		return c.do(ctx, "POST", "/me/messages/"+url.PathEscape(m.ID)+"/move", nil,
+	return c.forEachMsg(ctx, convID, func(base string, m apiMessage) error {
+		return c.do(ctx, "POST", base+"/messages/"+url.PathEscape(m.ID)+"/move", nil,
 			map[string]string{"destinationId": dest}, nil)
 	})
 }
@@ -622,6 +723,10 @@ func fileAttachments(paths []string) ([]map[string]any, error) {
 }
 
 func (c *Client) Send(ctx context.Context, d provider.Draft) error {
+	if a, _ := mailbox(d.InReplyTo); a != "" {
+		// would need Mail.Send.Shared and a from-header dance; out of scope
+		return fmt.Errorf("replying from shared mailbox %s is not supported", a)
+	}
 	if d.InReplyTo != "" {
 		return c.sendReply(ctx, d)
 	}
