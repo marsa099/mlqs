@@ -616,7 +616,7 @@ Singleton {
         if (i >= 0) convsModel.setProperty(i, "unread", !read)
         const delta = read ? -1 : 1
         if (unified || currentFolderId === _inboxIdFor(a)) _bumpUnread(a, delta)
-        else folders = folders.map(f => f.id === currentFolderId
+        else folders = folders.map(f => f.id === currentFolderId && f.role !== "shared"
             ? Object.assign({}, f, { unread: Math.max(0, (f.unread || 0) + delta) }) : f)
     }
 
@@ -1098,10 +1098,13 @@ Singleton {
             // with different ordering, which reads as the sidebar reshuffling
             const roleOrder = { inbox: 0, starred: 1, important: 2, sent: 3,
                                 drafts: 4, spam: 5, trash: 6, archive: 7 }
+            // shared mailboxes get their own section between the mailbox and labels
+            const sectionOrder = { mailbox: 0, shared: 1, labels: 2 }
             folders = (e.folders || []).map(f =>
-                Object.assign({}, f, { section: f.role === "label" ? "labels" : "mailbox" }))
+                Object.assign({}, f, { section: f.role === "label" ? "labels"
+                                              : f.role === "shared" ? "shared" : "mailbox" }))
                 .sort((a, b) => {
-                    if (a.section !== b.section) return a.section === "mailbox" ? -1 : 1
+                    if (a.section !== b.section) return sectionOrder[a.section] - sectionOrder[b.section]
                     const ra = roleOrder[a.role] !== undefined ? roleOrder[a.role] : 50
                     const rb = roleOrder[b.role] !== undefined ? roleOrder[b.role] : 50
                     if (ra !== rb) return ra - rb

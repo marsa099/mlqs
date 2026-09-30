@@ -1878,6 +1878,7 @@ func main() {
 				continue
 			}
 			g := graph.New(ctx, ts)
+			g.SharedMailboxes = a.SharedMailboxes
 			d.providers[a.Name] = g
 			d.cals[a.Name] = g
 			log.Printf("account %s (%s, outlook) ready", a.Name, a.Email)

@@ -23,6 +23,12 @@ type Account struct {
 	// work/school and personal accounts). Set to a tenant ID or
 	// "organizations" to pin sign-in to one org and skip consumer routing.
 	Tenant string `json:"tenant,omitempty"`
+	// Outlook only: shared mailboxes this user has been delegated access to
+	// (e.g. "support@company.com"). Each one shows up as a read-only-ish
+	// folder under this account (triage works, sending/replying does not),
+	// never counts toward badges, and never notifies. Needs the
+	// Mail.ReadWrite.Shared scope — re-run `mlqs auth <name>` after adding.
+	SharedMailboxes []string `json:"shared_mailboxes,omitempty"`
 	// IMAP vendor: plain IMAP + SMTP. Security is "ssl" (implicit TLS),
 	// "starttls" or "plain". Ports default to 993 (imap) / 587 (smtp).
 	// Username defaults to Email. The password is never stored inline here —
