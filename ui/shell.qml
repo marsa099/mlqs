@@ -32,6 +32,13 @@ FloatingWindow {
     onVisibleChanged: if (!visible && !_selfHide) Qt.quit()
 
     Connections {
+        target: win.contentItem.Window.window
+        function onActiveChanged() {
+            if (!target.active && win.visible) win.hideWarm()
+        }
+    }
+
+    Connections {
         target: Backend
         function onSummonRequested() { win.visible = true }
         function onDismissRequested() { win.hideWarm() }
