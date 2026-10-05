@@ -480,6 +480,15 @@ FloatingWindow {
             const ctrl = e.modifiers & Qt.ControlModifier
             const inConv = Backend.openConvId !== ""
 
+            if (!inConv && (Backend.inboxAuthNeeded !== "" || Backend.inboxAuthWaiting)) {
+                if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter) {
+                    Backend.startInboxReauth()
+                    e.accepted = true; return
+                } else if (e.key === Qt.Key_Escape) {
+                    Backend.dismissInboxReauth()
+                    e.accepted = true; return
+                }
+            }
             if (inConv && Backend.authRequiredAccount !== "") {
                 if (e.key === Qt.Key_Return || e.key === Qt.Key_Enter)
                     Backend.startReauth()

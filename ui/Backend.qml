@@ -530,6 +530,70 @@ Singleton {
     property string authRequiredAccount: ""
     property string authRequiredConversation: ""
     readonly property bool authWaiting: reauth.running
+    property var inboxAuthErrors: ({})
+    property string inboxAuthAccount: ""
+    property string inboxAuthError: ""
+    readonly property bool inboxAuthWaiting: inboxReauth.running
+    readonly property string inboxAuthNeeded: Object.keys(inboxAuthErrors).find(
+        a => accountFilter === "" || a === currentAccount) || ""
+
+    function requireInboxAuth(account) {
+        const errors = Object.assign({}, inboxAuthErrors)
+        errors[account] = true
+        inboxAuthErrors = errors
+        if (accountFilter !== "" && account !== currentAccount) return
+        loadingConvs = false
+        pendingCursor = ""
+        const paging = Object.assign({}, _pagingAccounts)
+        delete paging[account]
+        _pagingAccounts = paging
+        if (unified) {
+            const rows = Object.assign({}, _convsByAccount)
+            if (rows[account] === undefined) rows[account] = []
+            _convsByAccount = rows
+            _rebuildMerged()
+        }
+    }
+    function startInboxReauth() {
+        if (inboxAuthNeeded === "" || inboxReauth.running || reauth.running) return
+        inboxAuthAccount = inboxAuthNeeded
+        inboxAuthError = ""
+        inboxReauth.running = true
+    }
+    function dismissInboxReauth() {
+        const account = inboxAuthAccount || inboxAuthNeeded
+        inboxAuthAccount = ""
+        if (inboxReauth.running) inboxReauth.running = false
+        const errors = Object.assign({}, inboxAuthErrors)
+        delete errors[account]
+        inboxAuthErrors = errors
+        inboxAuthError = ""
+    }
+    function _inboxReauthFinished(code) {
+        const account = inboxAuthAccount
+        if (account === "") return
+        inboxAuthAccount = ""
+        if (code !== 0) {
+            inboxAuthError = "Sign-in was not completed. Press Enter to retry."
+            return
+        }
+        const errors = Object.assign({}, inboxAuthErrors)
+        delete errors[account]
+        inboxAuthErrors = errors
+        toast(accountLabel(account) + " signed in")
+        send({ type: "folders", account: account })
+        if (unified) {
+            loadingConvs = true
+            _fetchUnifiedFor(account)
+        } else if (account === currentAccount) {
+            refresh()
+        }
+    }
+    Process {
+        id: inboxReauth
+        command: ["mlqs", "auth", backend.inboxAuthAccount]
+        onExited: (code, status) => backend._inboxReauthFinished(code)
+    }
 
     function accountLabel(id) {
         const w = workspaces.find(x => x.id === id)
@@ -537,7 +601,7 @@ Singleton {
         return label.length ? label.charAt(0).toUpperCase() + label.slice(1) : "Account"
     }
     function startReauth() {
-        if (authRequiredAccount === "" || reauth.running) return
+        if (authRequiredAccount === "" || reauth.running || inboxReauth.running) return
         conversationError = ""
         reauth.running = true
     }
@@ -1190,6 +1254,10 @@ Singleton {
                 }
             }
         } else if (e.type === "authRequired") {
+            if (["folders", "conversations", "search", "threads"].indexOf(e.operation) >= 0) {
+                requireInboxAuth(e.account)
+                return
+            }
             if (e.operation === "conversation" && e.id === openConvId
                     && e.account === (openConvAccount || currentAccount)) {
                 conversationLoading = false

@@ -163,11 +163,45 @@ Rectangle {
         border.color: Theme.hairlineSoft
     }
 
+    Rectangle {
+        id: authBanner
+        anchors { top: card.top; left: card.left; right: card.right; margins: 14 }
+        height: visible ? 70 : 0
+        visible: Backend.inboxAuthNeeded !== "" || Backend.inboxAuthWaiting
+        radius: 16
+        color: Theme.surface2
+        Column {
+            anchors.centerIn: parent
+            width: parent.width - 24
+            spacing: 6
+            Text {
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.Wrap
+                color: Theme.fg
+                font.family: Theme.fontFamily
+                text: Backend.inboxAuthWaiting ? "Waiting for sign-in…"
+                    : Backend.inboxAuthError || ("Your " + Backend.accountLabel(Backend.inboxAuthNeeded) + " session expired.")
+            }
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                color: Theme.fg_muted
+                font.family: Theme.fontFamily
+                text: Backend.inboxAuthWaiting ? "Complete sign-in in your browser · Esc to cancel"
+                    : "Press Enter or click to sign in again · Esc to dismiss"
+            }
+        }
+        TapHandler {
+            enabled: !Backend.inboxAuthWaiting
+            onTapped: Backend.startInboxReauth()
+        }
+    }
+
     ListView {
         id: list
         // 11 + the pill's own 3px margin = 14, matching the side inset so the
         // card corner stays concentric with the pills on both axes
-        anchors { fill: card; topMargin: 11; bottomMargin: 11 }
+        anchors { fill: card; topMargin: authBanner.visible ? 98 : 11; bottomMargin: 11 }
         model: Backend.convs
         clip: true
         boundsBehavior: Flickable.StopAtBounds
